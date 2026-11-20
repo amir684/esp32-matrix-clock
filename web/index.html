@@ -88,6 +88,11 @@ canvas { width: 100%; display: block; image-rendering: pixelated; }
 .ble-ov { position: fixed; inset: 0; z-index: 20; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .ble-box { max-width: 360px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .ble-box h2 { margin: 0; }
+.flag-box { width: 100%; text-align: right; background: var(--card2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 13px; color: var(--dim); display: flex; flex-direction: column; gap: 8px; }
+.flag-box b { color: var(--text); }
+.flag-box ol { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; }
+.flag-box code { direction: ltr; text-align: left; font-size: 11px; word-break: break-all; background: var(--bg); padding: 6px 8px; border-radius: 8px; user-select: all; }
+.ble-box .flag-box .btn { padding: 10px; font-size: 15px; }
 .ble-box .btn { width: 100%; padding: 14px; font-size: 17px; }
 .game-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .game-card { background: var(--card2); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; color: var(--text); }
@@ -952,8 +957,21 @@ if (BLE) {
   const spin = h("div", { class: "spin" });
   const btn = h("button", { class: "btn main", onclick: () => Ble.connect() }, "חפש את השעון");
   const help = h("p", { class: "hint" }, "Chrome באנדרואיד. Bluetooth ומיקום (Location) צריכים להיות דלוקים. בחרו את השעון ברשימה.");
-  const flag = h("p", { class: "hint", style: "display:none" },
-    "לחיבור אוטומטי בפעם הבאה: פתחו ב-Chrome את chrome://flags, חפשו \"Web Bluetooth new permissions backend\", העבירו ל-Enabled והפעילו את Chrome מחדש.");
+  // Pages cannot open chrome:// links, so the address is copied and pasted by hand.
+  const FLAG_URL = "chrome://flags/#enable-web-bluetooth-new-permissions-backend";
+  const copyBtn = h("button", { class: "btn", onclick: async () => {
+    try { await navigator.clipboard.writeText(FLAG_URL); copyBtn.textContent = "✓ הועתק"; }
+    catch { prompt("העתיקו את הכתובת:", FLAG_URL); }
+  } }, "📋 העתק כתובת");
+  const flag = h("div", { class: "flag-box", style: "display:none" },
+    h("b", {}, "רוצים שהאפליקציה תתחבר לבד בפעם הבאה?"),
+    h("ol", {},
+      h("li", {}, "לחצו \"העתק כתובת\"."),
+      h("li", {}, "פתחו לשונית חדשה ב-Chrome, הדביקו בשורת הכתובת ולחצו Enter."),
+      h("li", {}, "ליד \"Web Bluetooth new permissions backend\" בחרו Enabled."),
+      h("li", {}, "לחצו Relaunch למטה. Chrome ייפתח מחדש."),
+      h("li", {}, "חזרו לכאן, לחצו \"חפש את השעון\" ובחרו אותו פעם אחת. מעכשיו החיבור אוטומטי.")),
+    h("code", {}, FLAG_URL), copyBtn);
   const title = h("h2", {}, saved && saved !== DEFAULT_NAME ? saved : "שעון מטריצה");
   const ov = h("div", { class: "ble-ov" }, h("div", { class: "ble-box" },
     h("div", { class: "logo big-logo" }), title, spin, btn, msg, help, flag));
