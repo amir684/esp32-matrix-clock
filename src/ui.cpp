@@ -495,7 +495,7 @@ bool takeDirty() {
 
 void begin() {
   curBright = 0;
-  notice("שלום", CRGB::Black, 1500);
+  notice("שעוני אמיר", CRGB::Black, 1500);
 }
 
 static void updateNight(time_t now) {

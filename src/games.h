@@ -28,4 +28,10 @@ int score();
 int best(int i);
 bool over();
 
+// Speed level 1..5 (where each game starts) and whether it speeds up while playing. Kept in flash.
+// Changing the game on screen starts it again at the new speed.
+int level(int i);
+bool ramp(int i);
+void setSpeed(int i, int level, bool ramp);
+
 } // namespace game

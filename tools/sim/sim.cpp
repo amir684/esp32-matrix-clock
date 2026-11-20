@@ -188,13 +188,13 @@ static int botSnake() {
 
 static int botDino() {
   ui::startGame(1);
-  uint32_t t0 = g_millis;
   bool ducking = false;
   int best = 0;
   tap(game::A); // start
   for (int f = 0; f < 6000 && !game::over(); f++) {
     tick1();
-    int reach = 4 + (int)((g_millis - t0) / 25000);
+    // a jump is ~10 columns long at every speed (games.cpp), so the cactus should be ~5 ahead: start at 7
+    int reach = 3;
     bool cactus = false, bird = false;
     for (int x = 4; x <= 4 + reach; x++) {
       if (same(mx::get(x, 6), 20, 190, 40)) cactus = true;
@@ -263,6 +263,7 @@ static int gamesTest() {
   for (int w : {32, 64}) {
     settings.width = w;
     apply();
+    for (int g = 0; g < game::count(); g++) game::setSpeed(g, 3, true);
     int s = botSnake(), d = botDino(), fl = botFlappy();
     bool t = botTetris();
     for (int i = 0; i < 60; i++) tick1(); // game over screen
@@ -278,6 +279,7 @@ static int gamesTest() {
         int r = rand() % 20;
         if (r < 5) game::key((game::Key)(rand() % game::KEY_N), rand() & 1, rand() % 4 == 0);
         else if (r == 5) game::button(rand() % 3, rand() & 1);
+        else if (r == 6 && rand() % 40 == 0) game::setSpeed(g, 1 + rand() % 5, rand() & 1);
         if (game::current() < 0) ui::startGame(g);
       }
     }
@@ -288,6 +290,14 @@ static int gamesTest() {
       printf("GAMES: not back to the clock\n");
       bad++;
     }
+  }
+  // the bots again at the slowest and fastest level
+  for (int l : {1, 5}) {
+    for (int g = 0; g < game::count(); g++) game::setSpeed(g, l, true);
+    int s = botSnake(), d = botDino(), fl = botFlappy();
+    bool t = botTetris();
+    printf("GAMES level %d: snake %d, dino %d, flappy %d, tetris ended %d\n", l, s, d, fl, t);
+    if (s < 3 || d < 3 || fl < 3 || !t) bad++;
   }
   settings.width = 32;
   apply();
@@ -311,7 +321,9 @@ int main() {
                {64, FACE_INFO, "64_info"}};
   settings.tickerEvery = 0;
   ui::begin();
-  run(T, 2000); // past the greeting
+  run(T, 1100);
+  dump("greeting");
+  run(T, 3000); // past the greeting
   for (auto &f : faces) {
     settings.width = f.w;
     settings.face = f.face;

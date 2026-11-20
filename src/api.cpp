@@ -50,6 +50,8 @@ static void gameJson(JsonDocument &doc) {
     JsonObject o = g.add<JsonObject>();
     o["name"] = game::name(i);
     o["best"] = game::best(i);
+    o["level"] = game::level(i);
+    o["ramp"] = game::ramp(i);
   }
 }
 static Response gameState() {
@@ -148,7 +150,11 @@ static Response action(const String &body) {
   else if (a == "testColors") ui::startTest(ui::TEST_COLORS);
   else if (a == "testStop") ui::startTest(ui::TEST_NONE);
   else if (a == "game") ui::startGame(doc["game"] | 0);
-  else if (a == "gameStop") {
+  else if (a == "gameSpeed") {
+    int g = doc["game"] | -1;
+    game::setSpeed(g, doc["level"] | game::level(g), doc["ramp"] | game::ramp(g));
+    return gameState();
+  } else if (a == "gameStop") {
     if (ui::mode() == ui::GAME) ui::setMode(ui::CLOCK);
   } else if (a == "key") {
     // a game key from the app; the answer carries the score so the app needs no extra request

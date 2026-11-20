@@ -96,6 +96,11 @@ canvas { width: 100%; display: block; image-rendering: pixelated; }
 .g-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 .g-head h2 { margin: 0; }
 .g-score { font-size: 30px; }
+.speed { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 2px; }
+.lvs { display: flex; gap: 4px; direction: ltr; }
+.lv { width: 38px; height: 38px; border-radius: 10px; background: var(--card2); border: 1px solid var(--line); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.lv.on { background: linear-gradient(135deg, var(--acc), var(--acc2)); color: #fff; border-color: transparent; }
+.ramp { display: flex; align-items: center; gap: 6px; }
 .g-over { color: var(--acc); min-height: 1.4em; margin: 4px 0; }
 .pad { direction: ltr; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 8px 0 12px; user-select: none; -webkit-user-select: none; }
 .dpad { display: grid; grid-template-columns: repeat(3, 60px); grid-template-rows: repeat(3, 60px); gap: 6px; }
@@ -629,6 +634,14 @@ tab("games", "משחקים", () => {
   const title = h("h2", {}), scoreEl = h("b", { class: "g-score" }), bestEl = h("span", { class: "hint" });
   const overEl = h("p", { class: "g-over" }), helpEl = h("p", { class: "hint" }), touchEl = h("p", { class: "hint" });
   const keys = {};
+  // speed: level 1..5 where the game starts, and whether it speeds up while playing
+  let curGame = -1;
+  const speedSet = o => api("/api/action", Object.assign({ do: "gameSpeed", game: curGame }, o)).then(show).catch(() => toast("נכשל", true));
+  const lvBtns = [1, 2, 3, 4, 5].map(n => h("button", { class: "lv", onclick: () => speedSet({ level: n }) }, String(n)));
+  const rampIn = h("input", { type: "checkbox", onchange: () => speedSet({ ramp: rampIn.checked }) });
+  const speedRow = h("div", { class: "speed" },
+    h("span", { class: "hint" }, "מהירות"), h("div", { class: "lvs" }, ...lvBtns),
+    h("label", { class: "ramp" }, h("label", { class: "sw" }, rampIn, h("span")), h("span", { class: "hint" }, "מאיץ בהדרגה")));
   async function send(k, s, r) {
     try { show(await api("/api/action", { do: "key", k, s, r: r || 0 }, true)); } catch (e) {}
   }
@@ -650,9 +663,9 @@ tab("games", "משחקים", () => {
     h("div", { class: "dpad" }, h("span"), key("up", "▲"), h("span"), key("left", "◀"), h("span"), key("right", "▶"), h("span"), key("down", "▼"), h("span")),
     key("a", "A", "a"));
   const play = card("", null,
-    h("div", { class: "g-head" }, title, scoreEl, bestEl), overEl, pad, helpEl, touchEl,
+    h("div", { class: "g-head" }, title, scoreEl, bestEl), speedRow, overEl, pad, helpEl, touchEl,
     h("div", { class: "btns" }, h("button", { class: "btn", onclick: () => api("/api/action", { do: "gameStop" }).then(gameRefresh).catch(() => {}) }, "יציאה לשעון")));
-  const pick = card("משחקים", "בחרו משחק. הוא רץ על השעון, והטלפון הוא השלט. אפשר לשחק גם בלחצני המגע; נגיעה ארוכה בלחצן 1 יוצאת. אחרי דקה וחצי בלי לחיצות השעון חוזר לבד.", list);
+  const pick = card("משחקים", "בחרו משחק. הוא רץ על השעון, והטלפון הוא השלט. את המהירות בוחרים בתוך המשחק (1 איטי, 5 מהיר), ו\"מאיץ בהדרגה\" מגביר אותה תוך כדי משחק. אפשר לשחק גם בלחצני המגע; נגיעה ארוכה בלחצן 1 יוצאת. אחרי דקה וחצי בלי לחיצות השעון חוזר לבד.", list);
   function show(st) {
     if (!st || !st.games) return;
     const lk = JSON.stringify(st.games);
@@ -660,12 +673,16 @@ tab("games", "משחקים", () => {
       listKey = lk;
       list.replaceChildren(...st.games.map((g, i) => h("button", {
         class: "game-card", onclick: () => api("/api/action", { do: "game", game: i }).then(gameRefresh).catch(() => toast("נכשל", true)),
-      }, h("span", { class: "g-icon" }, (INFO[i] || {}).icon || "🎮"), h("b", {}, g.name), h("span", { class: "hint" }, "שיא: " + g.best))));
+      }, h("span", { class: "g-icon" }, (INFO[i] || {}).icon || "🎮"), h("b", {}, g.name),
+         h("span", { class: "hint" }, "שיא: " + g.best + " · מהירות " + (g.level || 3) + (g.ramp === false ? "" : "↑")))));
     }
     const i = st.game, inf = INFO[i] || {};
     play.style.display = i >= 0 ? "" : "none";
     if (i < 0) return;
     const g = st.games[i] || {};
+    curGame = i;
+    lvBtns.forEach((b, n) => b.classList.toggle("on", n + 1 === (g.level || 3)));
+    rampIn.checked = g.ramp !== false;
     title.textContent = (inf.icon || "") + " " + (g.name || "");
     scoreEl.textContent = st.gameScore;
     bestEl.textContent = "שיא: " + (g.best || 0);

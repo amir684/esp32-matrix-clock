@@ -98,6 +98,14 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/action" and body.get("do") == "game":
             GAME.update(game=body.get("game", 0), gameScore=0, gameOver=False)
             self.send({"ok": True})
+        elif self.path == "/api/action" and body.get("do") == "gameSpeed":
+            g = GAME["games"][body.get("game", 0)]
+            if "level" in body:
+                g["level"] = body["level"]
+            if "ramp" in body:
+                g["ramp"] = body["ramp"]
+            GAME["gameScore"] = 0
+            self.send(GAME)
         elif self.path == "/api/action" and body.get("do") == "gameStop":
             GAME["game"] = -1
             self.send({"ok": True})

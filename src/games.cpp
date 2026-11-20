@@ -23,7 +23,11 @@ static float dt = 0; // seconds since the previous frame
 static const int N_GAMES = 4;
 static const char *const NAMES[N_GAMES] = {"סנייק", "דינוזאור", "פלאפי", "טטריס"};
 static uint16_t bests[N_GAMES];
+static uint8_t levels[N_GAMES] = {3, 3, 3, 3};
+static bool ramps[N_GAMES] = {true, true, true, true};
 static bool bestsLoaded = false;
+static int lv = 2;          // level of the game on screen, 0..4
+static bool speedUp = true; // it speeds up while playing
 static const uint32_t IDLE_MS = 90000;
 
 // ---------------- helpers ----------------
@@ -48,6 +52,10 @@ static void loadBests() {
     for (int i = 0; i < N_GAMES; i++) {
       char k[4] = {'b', char('0' + i), 0};
       bests[i] = p.getUShort(k, 0);
+      k[0] = 'l';
+      levels[i] = constrain(p.getUChar(k, 3), 1, 5);
+      k[0] = 'r';
+      ramps[i] = p.getBool(k, true);
     }
     p.end();
   }
@@ -60,6 +68,21 @@ static void saveBest(int i) {
   if (p.begin("games", false)) {
     char k[4] = {'b', char('0' + i), 0};
     p.putUShort(k, bests[i]);
+    p.end();
+  }
+#else
+  (void)i;
+#endif
+}
+
+static void saveSpeed(int i) {
+#ifndef GAMES_NO_NVS
+  Preferences p;
+  if (p.begin("games", false)) {
+    char k[4] = {'l', char('0' + i), 0};
+    p.putUChar(k, levels[i]);
+    k[0] = 'r';
+    p.putBool(k, ramps[i]);
     p.end();
   }
 #else
@@ -134,8 +157,10 @@ static void button(int b, bool) {
   else if (b == 2) turn(-ndy, ndx);
 }
 static void tick() {
-  uint32_t iv = (uint32_t)max(75, 240 - len * 5);
-  if (millis() - stepAt < iv) return;
+  static const int BASE[5] = {320, 240, 180, 135, 100};
+  int iv = BASE[lv];
+  if (speedUp) iv = max(BASE[lv] * 45 / 100, iv - (len - 3) * 5);
+  if (millis() - stepAt < (uint32_t)iv) return;
   stepAt = millis();
   dx = ndx;
   dy = ndy;
@@ -178,12 +203,16 @@ static Ob obs[MAX_OB];
 static int nObs;
 static float y, vy, speed, nextAt, groundOff;
 static uint32_t duckUntil;
-static const float G = 46, JUMP = 18.5f;
+// A jump is always about 3.9 rows high and about 10 columns long, whatever the speed: slow levels get a
+// slower, floatier jump instead of one that lands before the cactus has passed
+static float g = 46;
+static const float JUMP_H = 3.9f, JUMP_LEN = 10.5f;
 
 static void init() {
   nObs = 0;
   y = vy = 0;
-  speed = 12;
+  static const float START[5] = {9, 12, 15, 19, 24};
+  speed = START[lv];
   nextAt = 12;
   groundOff = 0;
   duckUntil = 0;
@@ -192,7 +221,11 @@ static void init() {
 static bool ducking() { return y == 0 && vy == 0 && (held(DOWN) || millis() < duckUntil); }
 static void jump() {
   waiting = false;
-  if (y == 0 && vy == 0) vy = JUMP;
+  if (y == 0 && vy == 0) {
+    float T = constrain(JUMP_LEN / speed, 0.5f, 1.1f); // time in the air
+    vy = 4 * JUMP_H / T;
+    g = 8 * JUMP_H / (T * T);
+  }
 }
 static void key(Key k) {
   if (k == A || k == UP) jump();
@@ -219,13 +252,13 @@ static void box(int &x0, int &x1, int &y0, int &y1) {
 static void tick() {
   if (waiting) return;
   if (y > 0 || vy > 0) {
-    vy -= G * dt;
+    vy -= g * dt;
     y += vy * dt;
     if (y <= 0) y = vy = 0;
   }
   float d = speed * dt;
   groundOff += d;
-  speed = min(30.f, speed + 0.3f * dt);
+  if (speedUp) speed = min(34.f, speed + 0.3f * dt);
   int k = 0;
   for (int i = 0; i < nObs; i++) {
     obs[i].x -= d;
@@ -301,7 +334,8 @@ static void init() {
   n = 0;
   y = 3.5f;
   vy = 0;
-  speed = 8;
+  static const float START[5] = {6, 8, 10, 12, 14};
+  speed = START[lv];
   nextAt = 6;
   lastGy = 2;
   waiting = true;
@@ -327,7 +361,7 @@ static void tick() {
     return;
   }
   float d = speed * dt;
-  speed = min(15.f, speed + 0.12f * dt);
+  if (speedUp) speed = min(18.f, speed + 0.12f * dt);
   int k = 0;
   for (int i = 0; i < n; i++) {
     pipes[i].x -= d;
@@ -478,8 +512,10 @@ static void tick() {
     if (held(UP)) move(-1), moveAt = millis() + 70;
     else if (held(DOWN)) move(1), moveAt = millis() + 70;
   }
-  uint32_t iv = (uint32_t)max(90, 650 - (lines / 6) * 55);
-  if (millis() - fallAt >= iv) step();
+  static const int BASE[5] = {900, 650, 450, 300, 180};
+  int iv = BASE[lv];
+  if (speedUp) iv = max(80, iv - (lines / 6) * 55);
+  if (millis() - fallAt >= (uint32_t)iv) step();
 }
 static void draw() {
   for (int d = 0; d < D; d++)
@@ -505,6 +541,24 @@ int best(int i) {
   loadBests();
   return i >= 0 && i < N_GAMES ? bests[i] : 0;
 }
+int level(int i) {
+  loadBests();
+  return i >= 0 && i < N_GAMES ? levels[i] : 3;
+}
+bool ramp(int i) {
+  loadBests();
+  return i >= 0 && i < N_GAMES ? ramps[i] : true;
+}
+void setSpeed(int i, int l, bool r) {
+  if (i < 0 || i >= N_GAMES) return;
+  loadBests();
+  l = constrain(l, 1, 5);
+  if (levels[i] == l && ramps[i] == r) return;
+  levels[i] = l;
+  ramps[i] = r;
+  saveSpeed(i);
+  if (cur == i) start(i);
+}
 
 void start(int i) {
   if (i < 0 || i >= N_GAMES) return;
@@ -512,6 +566,8 @@ void start(int i) {
   rng ^= millis() * 2654435761u + 1;
   if (!rng) rng = 1;
   cur = i;
+  lv = levels[i] - 1;
+  speedUp = ramps[i];
   W = mx::W();
   sc = 0;
   isOver = isRecord = waiting = false;
