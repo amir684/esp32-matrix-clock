@@ -66,10 +66,10 @@ static void readRtc() {
 static void startAccessPoint() {
   if (ap) return;
   WiFi.mode(settings.wifiMode == WIFI_HOME ? WIFI_AP_STA : WIFI_AP);
-  WiFi.softAP(AP_NAME, settings.apPass[0] ? settings.apPass : nullptr);
+  WiFi.softAP(settings.name, settings.apPass[0] ? settings.apPass : nullptr);
   dns.start(53, "*", WiFi.softAPIP()); // every name leads here, so phones open the page by themselves
   ap = true;
-  Serial.printf("access point %s at %s\n", AP_NAME, WiFi.softAPIP().toString().c_str());
+  Serial.printf("access point %s at %s\n", settings.name, WiFi.softAPIP().toString().c_str());
 }
 
 static void stopAccessPoint() {

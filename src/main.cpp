@@ -44,7 +44,7 @@ static void handleButtons() {
       else ui::startTicker();
     } else {
       String a = net::address();
-      if (net::apActive()) a = String(AP_NAME " ") + a;
+      if (net::apActive()) a = String(settings.name) + " " + a;
       ui::notice(a.c_str(), CRGB(0, 200, 120), 6000);
     }
     break;
@@ -68,6 +68,13 @@ void setup() {
 void loop() {
   net::loop();
   ble::loop();
+  // A new name reaches the Bluetooth scan at once (after the answer to the rename went out above);
+  // the clock's own WiFi network takes it when it next starts
+  static String bleName = settings.name;
+  if (settings.bleOn && bleName != settings.name) {
+    bleName = settings.name;
+    ble::setName(settings.name);
+  }
   handleButtons();
 
   // Settings changed by a button are saved once the touching stops, to spare the flash

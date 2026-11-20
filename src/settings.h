@@ -111,6 +111,7 @@ struct Settings {
   char wifiPass[65] = "";
   char apPass[65] = "";       // empty = open network
   char hostname[25] = DEFAULT_HOSTNAME;
+  char name[30] = AP_NAME;    // the clock's name: Bluetooth, its own WiFi network, the page title (29 bytes fit a BLE scan response)
   char tz[48] = IL_TZ;
   char ntpServer[48] = "pool.ntp.org";
   bool bleOn = true;          // Bluetooth access for the installed app (takes effect after a restart)

@@ -64,7 +64,7 @@ static Response status() {
   doc["ip"] = net::address();
   doc["ssid"] = connected ? WiFi.SSID() : String("");
   doc["rssi"] = connected ? WiFi.RSSI() : 0;
-  doc["ap"] = net::apActive() ? AP_NAME : "";
+  doc["ap"] = net::apActive() ? settings.name : "";
   doc["ble"] = ble::connected();
   doc["version"] = FIRMWARE_VERSION;
   doc["heap"] = ESP.getFreeHeap();

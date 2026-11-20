@@ -4,6 +4,7 @@
 
 #include "api.h"
 #include "config.h"
+#include "settings.h"
 
 namespace ble {
 
@@ -73,7 +74,7 @@ static void send(uint8_t id, const String &data) {
 
 void begin() {
   lock = xSemaphoreCreateMutex();
-  NimBLEDevice::init(AP_NAME);
+  NimBLEDevice::init(settings.name);
   NimBLEDevice::setMTU(517);
   server = NimBLEDevice::createServer();
   server->setCallbacks(new ServerCallbacks());
@@ -89,11 +90,22 @@ void begin() {
   NimBLEAdvertisementData ad, sr;
   ad.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
   ad.addServiceUUID(NimBLEUUID(BLE_SERVICE_UUID));
-  sr.setName(AP_NAME);
+  sr.setName(settings.name);
   adv->setAdvertisementData(ad);
   adv->setScanResponseData(sr);
   adv->start();
-  Serial.println("bluetooth advertising as " AP_NAME);
+  Serial.printf("bluetooth advertising as %s\n", settings.name);
+}
+
+void setName(const char *name) {
+  if (!server) return;
+  NimBLEDevice::setDeviceName(name);
+  NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+  NimBLEAdvertisementData sr;
+  sr.setName(name);
+  adv->stop();
+  adv->setScanResponseData(sr);
+  if (server->getConnectedCount() < CONFIG_BT_NIMBLE_MAX_CONNECTIONS) adv->start();
 }
 
 void loop() {

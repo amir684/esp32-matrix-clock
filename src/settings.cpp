@@ -113,6 +113,7 @@ void Settings::toJson(JsonDocument &doc, bool withSecrets) const {
   doc["wifiMode"] = wifiMode;
   doc["wifiSsid"] = wifiSsid;
   doc["hostname"] = hostname;
+  doc["name"] = name;
   doc["tz"] = tz;
   doc["ntpServer"] = ntpServer;
   doc["bleOn"] = bleOn;
@@ -205,6 +206,17 @@ void Settings::fromJson(const JsonDocument &d) {
   if (apPass[0] && strlen(apPass) < 8) apPass[0] = 0; // WPA2 needs at least 8 characters
   getStr(d, "hostname", hostname, sizeof hostname);
   if (!hostname[0]) strlcpy(hostname, DEFAULT_HOSTNAME, sizeof hostname);
+  getStr(d, "name", name, sizeof name);
+  // strlcpy may have cut a Hebrew letter in half: drop the broken tail
+  size_t n = strlen(name), k = n;
+  while (k > 0 && ((uint8_t)name[k - 1] & 0xC0) == 0x80) k--;            // continuation bytes at the end
+  if (k > 0 && ((uint8_t)name[k - 1] & 0xC0) == 0xC0) {                   // their lead byte
+    uint8_t lead = name[k - 1];
+    size_t want = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : 2;
+    if (n - (k - 1) < want) name[k - 1] = 0;
+  }
+  while (name[0] == ' ') memmove(name, name + 1, strlen(name));
+  if (!name[0]) strlcpy(name, AP_NAME, sizeof name);
   getStr(d, "tz", tz, sizeof tz);
   if (!tz[0]) strlcpy(tz, IL_TZ, sizeof tz);
   getStr(d, "ntpServer", ntpServer, sizeof ntpServer);

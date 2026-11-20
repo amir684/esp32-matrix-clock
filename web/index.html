@@ -90,6 +90,8 @@ canvas { width: 100%; display: block; image-rendering: pixelated; }
 .ble-box h2 { margin: 0; }
 .ble-box .btn { width: 100%; padding: 14px; font-size: 17px; }
 .big-logo { width: 72px; height: 72px; border-radius: 20px; }
+.spin { width: 34px; height: 34px; border: 3px solid var(--line); border-top-color: var(--acc); border-radius: 50%; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 560px) {
   .row { flex-wrap: wrap; }
   .row .ctl { max-width: 100%; }
@@ -101,7 +103,7 @@ canvas { width: 100%; display: block; image-rendering: pixelated; }
 <header>
   <div class="top">
     <div class="logo"></div>
-    <h1>שעון מטריצה</h1>
+    <h1 id="title">שעון מטריצה</h1>
     <span class="pill ok" id="pillSave" title="כל שינוי נשמר בשעון מיד, אין צורך בלחצן שמירה">✓ נשמר</span>
     <span class="pill" id="pillTime">--:--</span>
     <span class="pill" id="pillNet">…</span>
@@ -242,16 +244,22 @@ const Ble = (() => {
     queue.push(q); pump();
     return q.promise;
   }
-  async function connectGatt() {
-    onState("מתחבר…");
-    const srv = await dev.gatt.connect(), svc = await srv.getPrimaryService(SVC);
-    req = await svc.getCharacteristic(REQ);
-    const rsp = await svc.getCharacteristic(RSP);
-    rsp.addEventListener("characteristicvaluechanged", onData);
-    await rsp.startNotifications();
-    up = true; onState("", true); pump();
+  // One attempt at a time (the retry loop and the button may both ask); the handler is assigned, not added,
+  // so a reconnect never delivers each packet twice
+  let gattP = null;
+  function connectGatt() {
+    if (!gattP) gattP = (async () => {
+      onState("מתחבר…");
+      const d = dev, srv = await d.gatt.connect(), svc = await srv.getPrimaryService(SVC);
+      req = await svc.getCharacteristic(REQ);
+      const rsp = await svc.getCharacteristic(RSP);
+      rsp.oncharacteristicvaluechanged = onData;
+      await rsp.startNotifications();
+      up = true; onState("", true); pump();
+    })().finally(() => gattP = null);
+    return gattP;
   }
-  function useDev(d) { if (dev === d) return; dev = d; dev.addEventListener("gattserverdisconnected", lost); }
+  function useDev(d) { if (dev === d) return; dev = d; dev.addEventListener("gattserverdisconnected", e => { if (e.target === dev) lost(); }); }
   let retrying = false;
   async function retry() {
     if (retrying) return; retrying = true;
@@ -270,20 +278,23 @@ const Ble = (() => {
   async function connect() {
     try {
       if (!navigator.bluetooth) return onState("הדפדפן לא תומך ב-Bluetooth. צריך Chrome באנדרואיד.");
-      if (!dev) useDev(await navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }, { name: NAME }], optionalServices: [SVC] }));
+      // the service id finds the clock whatever it was renamed to
+      useDev(await navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }, { name: NAME }], optionalServices: [SVC] }));
       await connectGatt();
     } catch (e) { onState("החיבור נכשל: " + (e.message || e)); }
   }
   // A clock chosen before: connect without the button (Chrome's getDevices, not on every Android build)
-  async function auto() {
-    if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return;
+  // Returns "on" when it started, "none" when no clock is remembered, "off" when the browser cannot do it
+  async function auto(name) {
+    if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return "off";
     try {
-      const ds = await navigator.bluetooth.getDevices(), d = ds.find(x => x.name === NAME) || ds[0];
-      if (!d) return;
-      useDev(d); onState("מתחבר אוטומטית…");
+      const ds = await navigator.bluetooth.getDevices(), d = ds.find(x => x.name === name) || ds.find(x => x.name === NAME) || ds[0];
+      if (!d) return "none";
+      useDev(d); onState("מתחבר…");
       if (d.watchAdvertisements) { d.addEventListener("advertisementreceived", () => { if (!up) retry(); }); try { await d.watchAdvertisements(); } catch (e) {} }
       retry();
-    } catch (e) {}
+      return "on";
+    } catch (e) { return "off"; }
   }
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !up && dev) retry(); });
   return { request, connect, auto, isUp: () => up, onState: f => onState = f };
@@ -328,7 +339,7 @@ async function save(obj) {
 function retrySave() { if (unsaved && !saving) { const o = unsaved; unsaved = null; save(o); } }
 // Typed fields save by themselves when typing pauses, and at once on Enter or on leaving the field.
 // Orange outline: not saved yet. Green: saved.
-function typed(i, key, value) {
+function typed(i, key, value, button) {
   let t, ver = 0, sent = 0;
   const send = final => {
     clearTimeout(t);
@@ -339,11 +350,17 @@ function typed(i, key, value) {
     const my = sent = ver;
     save({ [key]: v }).then(ok => {
       if (!ok || my !== ver) return;
+      if (button) button.style.display = "none";
       i.classList.remove("editing"); i.classList.add("saved");
       clearTimeout(i.ft); i.ft = setTimeout(() => i.classList.remove("saved"), 1500);
     });
   };
-  i.addEventListener("input", () => { ver++; i.classList.add("editing"); i.classList.remove("saved"); clearTimeout(t); t = setTimeout(() => send(false), 900); });
+  i.addEventListener("input", () => {
+    ver++; i.classList.add("editing"); i.classList.remove("saved"); clearTimeout(t);
+    if (button) button.style.display = ""; // text: saved with the button, Enter, or on leaving the field
+    else t = setTimeout(() => send(false), 900);
+  });
+  if (button) button.addEventListener("click", () => send(true));
   i.addEventListener("change", () => send(true));
   i.addEventListener("keydown", e => { if (e.key === "Enter") i.blur(); });
   return i;
@@ -355,7 +372,7 @@ async function act(what, extra) {
 }
 
 // Every control registers how to refresh itself from S
-function refresh() { for (const d of deps) d(); }
+function refresh() { for (const d of deps) d(); showName(); }
 function showIf(el, cond) { deps.push(() => el.style.display = cond() ? "" : "none"); return el; }
 
 function card(title, hint, ...rows) { return h("div", { class: "card" }, h("h2", {}, title), hint ? h("p", { class: "hint" }, hint) : null, ...rows); }
@@ -395,10 +412,24 @@ function number(key, label, hint, min, max, step, unit) {
   deps.push(() => { if (notTyping(i)) i.value = S[key]; });
   return row(label, hint, i, unit ? h("span", { class: "hint" }, unit) : null);
 }
-function text(key, label, hint, max, ph) {
-  const i = typed(h("input", { type: "text", maxlength: max, placeholder: ph || "" }), key, () => i.value);
+function text(key, label, hint, max, ph, value) {
+  const b = h("button", { class: "btn main", style: "display:none" }, "שמור");
+  const i = typed(h("input", { type: "text", maxlength: max, placeholder: ph || "", enterkeyhint: "done" }), key, () => value ? value(i.value) : i.value, b);
   deps.push(() => { if (notTyping(i)) i.value = S[key] || ""; });
-  return row(label, hint, i);
+  return row(label, hint, i, b);
+}
+// The clock's name fits 29 bytes (a Bluetooth scan answer): a Hebrew letter takes 2
+function nameValue(v) {
+  const en = new TextEncoder();
+  v = v.trim();
+  while (en.encode(v).length > 29) v = v.slice(0, -1);
+  return v || undefined;
+}
+const DEFAULT_NAME = "MATRIX-CLOCK";
+function showName() {
+  const n = S.name && S.name !== DEFAULT_NAME ? S.name : "שעון מטריצה";
+  $("title").textContent = n; document.title = n;
+  try { if (S.name) localStorage.setItem("clockName", S.name); } catch (e) {}
 }
 function color(key, label, hint) {
   const i = h("input", { type: "color", onchange: () => save({ [key]: i.value }) });
@@ -675,7 +706,7 @@ tab("net", "שעה ורשת", () => {
         text("ntpServer", "שרת שעה", null, 47),
         text("hostname", "שם השעון ברשת", "אפשר לגלוש אל http://שם.local", 24),
       ), () => S.wifiMode === 1),
-      row("סיסמה לרשת של השעון", "לרשת MATRIX-CLOCK. לפחות 8 תווים.", apPass, h("button", { class: "btn", onclick: () => {
+      row("סיסמה לרשת של השעון", "לרשת ה-WiFi של השעון. לפחות 8 תווים.", apPass, h("button", { class: "btn", onclick: () => {
         if (apPass.value && apPass.value.length < 8) return toast("לפחות 8 תווים", true);
         save({ apPass: apPass.value }); apPass.value = "";
       } }, "שמור")),
@@ -698,6 +729,8 @@ tab("sys", "מערכת", () => {
   } });
   const info = h("div", { class: "status", id: "sysinfo" });
   return [
+    card("שם השעון", "השם שמופיע בסריקת Bluetooth, ברשת ה-WiFi של השעון ובראש הדף.",
+      text("name", "שם", "עד 29 אותיות באנגלית או 14 בעברית. ברשת ה-WiFi של השעון השם מתעדכן אחרי הפעלה מחדש.", 29, DEFAULT_NAME, nameValue)),
     card("מידע", null, info),
     BLE ? card("עדכון קושחה", "עדכון קושחה אפשרי רק דרך WiFi: התחברו לרשת של השעון (או לרשת הבית שלו) ופתחו את הדף שהוא מגיש, לשונית \"מערכת\".") :
     card("עדכון קושחה", "קובץ firmware.bin מתוך .pio/build/esp32doit-devkit-v1/",
@@ -807,18 +840,35 @@ function build() {
 build();
 if (BLE) {
   // The installed app: connect screen, offline cache, manifest
+  // The clock used last time is connected by itself; the scan button shows up only when that fails.
+  // (Chrome opens its device list only after a tap, so the scan itself cannot pop up alone.)
+  let saved = "";
+  try { saved = localStorage.getItem("clockName") || ""; } catch (e) {}
   const msg = h("p", { class: "hint", id: "bleMsg" });
-  const btn = h("button", { class: "btn main", onclick: () => Ble.connect() }, "התחבר בבלוטות'");
+  const spin = h("div", { class: "spin" });
+  const btn = h("button", { class: "btn main", onclick: () => Ble.connect() }, "חפש את השעון");
+  const help = h("p", { class: "hint" }, "Chrome באנדרואיד. Bluetooth ומיקום (Location) צריכים להיות דלוקים. בחרו את השעון ברשימה.");
+  const flag = h("p", { class: "hint", style: "display:none" },
+    "לחיבור אוטומטי בפעם הבאה: פתחו ב-Chrome את chrome://flags, חפשו \"Web Bluetooth new permissions backend\", העבירו ל-Enabled והפעילו את Chrome מחדש.");
+  const title = h("h2", {}, saved && saved !== DEFAULT_NAME ? saved : "שעון מטריצה");
   const ov = h("div", { class: "ble-ov" }, h("div", { class: "ble-box" },
-    h("div", { class: "logo big-logo" }), h("h2", {}, "שעון מטריצה"), btn, msg,
-    h("p", { class: "hint" }, "Chrome באנדרואיד. Bluetooth ומיקום (Location) צריכים להיות דלוקים. בחרו MATRIX-CLOCK ברשימה.")));
+    h("div", { class: "logo big-logo" }), title, spin, btn, msg, help, flag));
   document.body.append(ov);
+  const scanMode = text => { spin.style.display = "none"; btn.style.display = ""; help.style.display = ""; if (text) msg.textContent = text; };
+  let auto = false;
   Ble.onState((text, ok) => {
     ov.style.display = ok ? "none" : "flex";
-    msg.textContent = text || "";
-    if (ok) load().then(poll);
+    if (!auto || btn.style.display !== "none") msg.textContent = text || "";
+    if (ok) { auto = false; scanMode(); load().then(poll); }
   });
-  Ble.auto();
+  spin.style.display = "none";
+  Ble.auto(saved).then(r => {
+    if (r !== "on") { scanMode(); if (r === "off") flag.style.display = ""; return; }
+    auto = true;
+    btn.style.display = "none"; help.style.display = "none"; spin.style.display = "";
+    msg.textContent = "מתחבר ל-" + (saved || "שעון") + "…";
+    setTimeout(() => { if (!Ble.isUp()) scanMode("השעון לא נמצא. הוא דלוק וקרוב? אפשר גם לחפש אותו:"); }, 8000);
+  });
   for (const [rel, href] of [["manifest", "manifest.webmanifest"], ["icon", "icon.svg"]]) document.head.append(h("link", { rel, href }));
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
   setInterval(poll, 3000);

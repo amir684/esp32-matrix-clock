@@ -10,6 +10,7 @@
   function notify(bytes) {
     const dv = new DataView(bytes.buffer.slice(0));
     for (const f of listeners) f({ target: { value: dv } });
+    if (rsp.oncharacteristicvaluechanged) rsp.oncharacteristicvaluechanged({ target: { value: dv } });
   }
   async function answer(id, text) {
     const nl = text.indexOf("\n");
@@ -34,7 +35,8 @@
       if (m[1] & 2) setTimeout(() => answer(inId, dec.decode(new Uint8Array(inbox))), 5);
     }
   };
-  const rsp = { addEventListener: (n, f) => listeners.push(f), startNotifications: async () => {} };
+  // like Chrome: the same characteristic object on every connect, with both ways of listening
+  const rsp = { addEventListener: (n, f) => listeners.push(f), startNotifications: async () => {}, oncharacteristicvaluechanged: null };
   const device = {
     name: "MATRIX-CLOCK",
     addEventListener() {},

@@ -18,5 +18,6 @@ namespace ble {
 void begin();
 void loop(); // answers a waiting request; call from the main loop
 bool connected();
+void setName(const char *name); // new name in scans, without dropping a connection
 
 } // namespace ble
