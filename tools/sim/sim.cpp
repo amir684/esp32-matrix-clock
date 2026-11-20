@@ -68,13 +68,18 @@ static void apply() {
 
 static int mapOf[MAT_H][MAX_W]; // chain position of every logical pixel
 
-// Decodes the SPI stream back to the first color byte of each LED (3 SPI bits per data bit, 110 = 1)
+// Decodes the SPI stream back to the first color byte of each LED (4 SPI bits per data bit, 1100 = 1)
 static std::vector<int> firstBytes(int n) {
   std::vector<int> r(n);
   for (int i = 0; i < n; i++) {
-    uint32_t bits = (g_spiOut[i * 9] << 16) | (g_spiOut[i * 9 + 1] << 8) | g_spiOut[i * 9 + 2];
+    const uint8_t *q = &g_spiOut[i * 12];
+    uint32_t bits = ((uint32_t)q[0] << 24) | (q[1] << 16) | (q[2] << 8) | q[3];
     int v = 0;
-    for (int b = 7; b >= 0; b--) v = (v << 1) | ((bits >> (b * 3 + 1)) & 1);
+    for (int b = 7; b >= 0; b--) {
+      uint32_t nib = (bits >> (b * 4)) & 15;
+      if (nib != 0b1000 && nib != 0b1100) v = -100000;  // malformed bit: the pixel ends up unmapped
+      v = (v << 1) | ((nib >> 2) & 1);
+    }
     r[i] = v;
   }
   return r;

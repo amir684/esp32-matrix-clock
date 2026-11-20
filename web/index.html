@@ -16,9 +16,13 @@ html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.
 header { position: sticky; top: 0; z-index: 5; background: linear-gradient(180deg, #0d0f14 70%, #0d0f14e0); padding: 12px 16px 0; }
 .top { display: flex; align-items: center; gap: 10px; max-width: 860px; margin: 0 auto; }
 .logo { width: 30px; height: 30px; border-radius: 9px; background: conic-gradient(from 0deg, #ff3d3d, #ffb13d, #3ddc97, #3db4ff, #a23dff, #ff3d3d); flex: none; }
-h1 { font-size: 18px; margin: 0; flex: 1; }
+h1 { font-size: 18px; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pill { font-size: 12px; color: var(--dim); background: var(--card); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; white-space: nowrap; }
 .pill.ok { color: var(--ok); }
+.pill.busy { color: var(--acc); }
+.pill.bad { color: var(--bad); border-color: var(--bad); cursor: pointer; }
+input.editing { border-color: var(--acc) !important; }
+input.saved { border-color: var(--ok) !important; box-shadow: 0 0 0 2px #3ddc9733; }
 nav { display: flex; gap: 6px; overflow-x: auto; max-width: 860px; margin: 10px auto 0; padding-bottom: 10px; scrollbar-width: none; }
 nav::-webkit-scrollbar { display: none; }
 nav button { flex: none; background: var(--card); color: var(--dim); border: 1px solid var(--line); border-radius: 99px; padding: 7px 14px; font: inherit; cursor: pointer; }
@@ -98,6 +102,7 @@ canvas { width: 100%; display: block; image-rendering: pixelated; }
   <div class="top">
     <div class="logo"></div>
     <h1>שעון מטריצה</h1>
+    <span class="pill ok" id="pillSave" title="כל שינוי נשמר בשעון מיד, אין צורך בלחצן שמירה">✓ נשמר</span>
     <span class="pill" id="pillTime">--:--</span>
     <span class="pill" id="pillNet">…</span>
   </div>
@@ -296,13 +301,54 @@ async function api(path, body) {
   return r.json();
 }
 
+// Every change goes to the clock at once; the pill in the header tells whether it got there.
+// What failed is kept, and a tap on the pill sends it again.
+let saving = 0, unsaved = null;
+function merge(a, b) {
+  for (const k in b) a[k] = b[k] && typeof b[k] === "object" && !Array.isArray(b[k]) ? merge(a[k] || {}, b[k]) : b[k];
+  return a;
+}
+function saveState() {
+  const p = $("pillSave");
+  if (unsaved) { p.textContent = "⚠ לא נשמר · נסה שוב"; p.className = "pill bad"; }
+  else if (saving) { p.textContent = "שומר…"; p.className = "pill busy"; }
+  else { p.textContent = "✓ נשמר"; p.className = "pill ok"; }
+}
 async function save(obj) {
+  saving++; saveState();
+  let ok = true;
   try {
     S = await api("/api/settings", obj);
     refresh();
     toast("נשמר");
-  } catch (e) { toast("השמירה נכשלה", true); }
+  } catch (e) { ok = false; unsaved = merge(unsaved || {}, obj); toast("השמירה נכשלה", true); }
+  saving--; saveState();
+  return ok;
 }
+function retrySave() { if (unsaved && !saving) { const o = unsaved; unsaved = null; save(o); } }
+// Typed fields save by themselves when typing pauses, and at once on Enter or on leaving the field.
+// Orange outline: not saved yet. Green: saved.
+function typed(i, key, value) {
+  let t, ver = 0, sent = 0;
+  const send = final => {
+    clearTimeout(t);
+    if (ver === sent) return;
+    if (!final && !i.checkValidity()) return; // half-typed number: wait for the end
+    const v = value();
+    if (v === undefined) return;
+    const my = sent = ver;
+    save({ [key]: v }).then(ok => {
+      if (!ok || my !== ver) return;
+      i.classList.remove("editing"); i.classList.add("saved");
+      clearTimeout(i.ft); i.ft = setTimeout(() => i.classList.remove("saved"), 1500);
+    });
+  };
+  i.addEventListener("input", () => { ver++; i.classList.add("editing"); i.classList.remove("saved"); clearTimeout(t); t = setTimeout(() => send(false), 900); });
+  i.addEventListener("change", () => send(true));
+  i.addEventListener("keydown", e => { if (e.key === "Enter") i.blur(); });
+  return i;
+}
+const notTyping = i => document.activeElement !== i;
 async function act(what, extra) {
   try { await api("/api/action", Object.assign({ do: what }, extra || {})); }
   catch (e) { toast("נכשל", true); }
@@ -342,13 +388,16 @@ function range(key, label, hint, min, max, step, fmt) {
   return row(label, hint, i, out);
 }
 function number(key, label, hint, min, max, step, unit) {
-  const i = h("input", { type: "number", min, max, step, onchange: () => save({ [key]: +i.value }) });
-  deps.push(() => i.value = S[key]);
+  const i = typed(h("input", { type: "number", min, max, step, inputmode: "decimal" }), key, () => {
+    const v = parseFloat(i.value);
+    return isNaN(v) ? undefined : Math.min(max, Math.max(min, v));
+  });
+  deps.push(() => { if (notTyping(i)) i.value = S[key]; });
   return row(label, hint, i, unit ? h("span", { class: "hint" }, unit) : null);
 }
 function text(key, label, hint, max, ph) {
-  const i = h("input", { type: "text", maxlength: max, placeholder: ph || "", onchange: () => save({ [key]: i.value }) });
-  deps.push(() => i.value = S[key] || "");
+  const i = typed(h("input", { type: "text", maxlength: max, placeholder: ph || "" }), key, () => i.value);
+  deps.push(() => { if (notTyping(i)) i.value = S[key] || ""; });
   return row(label, hint, i);
 }
 function color(key, label, hint) {
@@ -357,8 +406,12 @@ function color(key, label, hint) {
   return row(label, hint, i);
 }
 function timeOfDay(key, label) {
-  const i = h("input", { type: "time", onchange: () => { const [a, b] = i.value.split(":").map(Number); save({ [key]: a * 60 + b }); } });
-  deps.push(() => { const m = S[key] || 0; i.value = String(m / 60 | 0).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); });
+  const i = typed(h("input", { type: "time" }), key, () => {
+    if (!i.value) return;
+    const [a, b] = i.value.split(":").map(Number);
+    return a * 60 + b;
+  });
+  deps.push(() => { if (!notTyping(i)) return; const m = S[key] || 0; i.value = String(m / 60 | 0).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); });
   return row(label, null, i);
 }
 const pct = v => Math.max(1, Math.round(v * 100 / 255)) + "%";
@@ -446,7 +499,7 @@ tab("info", "תאריך ומידע", () => {
       showIf(toggle("gregLong", "תאריך לועזי במילים", "\"18 בנובמבר 2026\" במקום 18.11.2026"), () => S.items && S.items.gregdate),
       itemToggle("events", "חגים, צומות וראשי חודשים"),
       itemToggle("parasha", "פרשת השבוע"),
-      itemToggle("shabbat", "הדלקת נרות וצאת שבת", "ביום שישי, בערבי חג ובשבת עצמה"),
+      itemToggle("shabbat", "כניסת שבת וצאת שבת", "ביום שישי, בערבי חג ובשבת עצמה"),
       itemToggle("omer", "ספירת העומר"),
       itemToggle("temp", "טמפרטורה", "מהחיישן שבתוך ה-DS3231"),
       showIf(number("tempOffset", "תיקון טמפרטורה", "החיישן מודד את חום השבב, בדרך כלל מעט יותר מהחדר", -15, 15, 0.5, "°"), () => S.items && S.items.temp),
@@ -455,13 +508,13 @@ tab("info", "תאריך ומידע", () => {
       showIf(text("message", "טקסט ההודעה", null, 99, "ברוכים הבאים"), () => S.items && S.items.message),
       showIf(color("messageColor", "צבע ההודעה"), () => S.items && S.items.message),
     ),
-    card("לוח עברי", "המיקום קובע את זמני השקיעה, הדלקת הנרות וצאת השבת.",
+    card("לוח עברי", "המיקום קובע את זמני השקיעה, כניסת השבת וצאתה.",
       row("עיר", null, cityList),
       number("lat", "קו רוחב", null, -66, 66, 0.001),
       number("lon", "קו אורך", null, -180, 180, 0.001),
       toggle("israel", "בארץ ישראל", "יום טוב אחד וסדר הפרשות של ארץ ישראל"),
       toggle("dayAtSunset", "התאריך העברי מתחלף בשקיעה"),
-      number("candleMinutes", "הדלקת נרות", "דקות לפני השקיעה (ירושלים 40, רוב הארץ 20)", 0, 90, 1, "דקות"),
+      number("candleMinutes", "כניסת שבת", "הדלקת נרות, דקות לפני השקיעה (ירושלים 40, רוב הארץ 20)", 0, 90, 1, "דקות"),
       number("havdalahDeg", "צאת שבת", "מעלות מתחת לאופק (8.5 נפוץ)", 3, 20, 0.1, "°"),
       select("parashaScheme", "מנהג הפרשות", null, [[0, "רגיל"], [1, "תימני בלאדי"], [2, "תימני קדום (דרדעי)"]]),
     ),
@@ -724,6 +777,8 @@ async function poll() {
     stat(ST.wifi ? ST.rssi + " dBm" : "–", "עוצמת אות"));
   for (const d of stDeps) d();
 }
+
+$("pillSave").addEventListener("click", retrySave);
 
 async function load() {
   try { S = await api("/api/settings"); refresh(); } catch (e) { toast("אין חיבור לשעון", true); }

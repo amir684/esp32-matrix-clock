@@ -177,8 +177,14 @@ int buildTicker(Segment *out, int max) {
       if ((s = seg(out, n, max, IT_SHABBAT)))
         snprintf(s->text, sizeof s->text, "%s %s", dow == 6 ? "צאת שבת" : "צאת החג", t);
     } else if (!restToday && restTomorrow && nowT < sunset) {
+      // the eve: when it comes in and, if it is a single day, when it goes out
+      const char *what = dow + 1 == 6 ? "שבת" : "החג";
       fmtTime(sunset - settings.candleMinutes * 60, t, sizeof t);
-      if ((s = seg(out, n, max, IT_SHABBAT))) snprintf(s->text, sizeof s->text, "הדלקת נרות %s", t);
+      if ((s = seg(out, n, max, IT_SHABBAT))) snprintf(s->text, sizeof s->text, "כניסת %s %s", what, t);
+      if (!restAfter) {
+        fmtTime(havdalahTomorrow, t, sizeof t);
+        if ((s = seg(out, n, max, IT_SHABBAT))) snprintf(s->text, sizeof s->text, "צאת %s %s", what, t);
+      }
     } else if (evening && restTomorrow && !restAfter) {
       fmtTime(havdalahTomorrow, t, sizeof t);
       if ((s = seg(out, n, max, IT_SHABBAT)))

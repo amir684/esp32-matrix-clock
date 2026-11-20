@@ -18,12 +18,19 @@ static volatile uint16_t mtu = 23;
 
 bool connected() { return isConnected; }
 
+// Advertising stops when a phone connects and NimBLE 2.x does not restart it by itself. It is restarted on
+// every connect and disconnect, so the clock can always be found: also when a closed app left a dead
+// connection behind that the phone has not given up yet.
 class ServerCallbacks : public NimBLEServerCallbacks {
-  void onConnect(NimBLEServer *, NimBLEConnInfo &) override {
+  void onConnect(NimBLEServer *s, NimBLEConnInfo &) override {
     isConnected = true;
     mtu = 23;
+    if (s->getConnectedCount() < CONFIG_BT_NIMBLE_MAX_CONNECTIONS) NimBLEDevice::startAdvertising();
   }
-  void onDisconnect(NimBLEServer *, NimBLEConnInfo &, int) override { isConnected = false; } // advertising restarts by itself
+  void onDisconnect(NimBLEServer *s, NimBLEConnInfo &, int) override {
+    isConnected = s->getConnectedCount() > 0;
+    NimBLEDevice::startAdvertising();
+  }
   void onMTUChange(uint16_t m, NimBLEConnInfo &) override { mtu = m; }
 };
 
@@ -74,6 +81,7 @@ void begin() {
   NimBLECharacteristic *req = svc->createCharacteristic(BLE_REQ_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
   req->setCallbacks(new RequestCallbacks());
   rspChar = svc->createCharacteristic(BLE_RSP_UUID, NIMBLE_PROPERTY::NOTIFY);
+  server->advertiseOnDisconnect(true);
   server->start();
 
   // The 128-bit service id fills most of the 31-byte advertisement, so the name goes in the scan response

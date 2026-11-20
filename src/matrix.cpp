@@ -2,8 +2,12 @@
 
 #include "font.h"
 
-// The LEDs are driven by the SPI hardware: every WS2812 bit becomes three SPI bits at 2.4 MHz
-// (0 -> 100, 1 -> 110), so the timing comes from hardware. Not FastLED's controller nor the RMT driver:
+// The LEDs are driven by the SPI hardware: every WS2812 bit becomes four SPI bits at 3.2 MHz
+// (0 -> 1000 = 0.31 us high, 1 -> 1100 = 0.62 us high), so the timing comes from hardware.
+// Four, not three: the core sends the frame in 64-byte pieces with a short pause between them. With four
+// bits per data bit every piece ends at the end of a data bit, while the line is low, and the pause is
+// harmless; with three bits a piece could end in the middle of a high pulse, stretch it, and turn 0 bits
+// into 1 bits (pale, washed-out colors). Three bits also gave 0.42 us for a 0, above the WS2812B limit. Not FastLED's controller nor the RMT driver:
 // both keep interrupt code in IRAM, and next to WiFi and Bluetooth the ESP32 has no IRAM left.
 // The core's SPI functions work on the registers directly, with no interrupt at all.
 // FastLED is still used for colors, effects math and the power calculation.
@@ -19,8 +23,8 @@ static int order = 0;
 static int maxmA = 0;
 static int clipX0 = 0, clipX1 = MAX_W;
 static spi_t *spi = nullptr;
-static uint32_t *wire = nullptr;   // the encoded frame: 9 bytes per LED, word aligned for the SPI FIFO
-static uint8_t enc[256][3];        // one color byte -> 24 SPI bits
+static uint32_t *wire = nullptr;   // the encoded frame: 12 bytes per LED, word aligned for the SPI FIFO
+static uint8_t enc[256][4];        // one color byte -> 32 SPI bits
 static portMUX_TYPE wireLock = portMUX_INITIALIZER_UNLOCKED;
 
 // ---------------- Paint ----------------
@@ -42,15 +46,16 @@ CRGB Paint::at(int x, int y) const {
 void begin() {
   for (int v = 0; v < 256; v++) {
     uint32_t bits = 0;
-    for (int b = 7; b >= 0; b--) bits = (bits << 3) | ((v & (1 << b)) ? 0b110 : 0b100);
-    enc[v][0] = bits >> 16;
-    enc[v][1] = bits >> 8;
-    enc[v][2] = bits;
+    for (int b = 7; b >= 0; b--) bits = (bits << 4) | ((v & (1 << b)) ? 0b1100 : 0b1000);
+    enc[v][0] = bits >> 24;
+    enc[v][1] = bits >> 16;
+    enc[v][2] = bits >> 8;
+    enc[v][3] = bits;
   }
-  wire = (uint32_t *)malloc((MAX_LEDS * 9 + 3) & ~3);
+  wire = (uint32_t *)malloc(MAX_LEDS * 12);
   spi = spiStartBus(VSPI, 0, SPI_MODE0, SPI_MSBFIRST);
   if (spi) {
-    spiSetClockDiv(spi, spiFrequencyToClockDiv(spi, 2400000));
+    spiSetClockDiv(spi, spiFrequencyToClockDiv(spi, 3200000));
     spiAttachMOSI(spi, PIN_LED);
   }
   if (!spi || !wire) Serial.println("LED output could not be started");
@@ -127,7 +132,8 @@ static inline uint8_t *putByte(uint8_t *p, uint8_t v) {
   p[0] = enc[v][0];
   p[1] = enc[v][1];
   p[2] = enc[v][2];
-  return p + 3;
+  p[3] = enc[v][3];
+  return p + 4;
 }
 
 // Sends out[0 .. n) to the chain
@@ -153,11 +159,11 @@ static void send(int n, uint8_t brightness) {
     }
     s = putByte(putByte(putByte(s, a), b), d);
   }
-  // The SPI FIFO holds 64 bytes (2.7 LEDs) and is refilled by the CPU. An interrupt between two refills
+  // The SPI FIFO holds 64 bytes (5.3 LEDs) and is refilled by the CPU. An interrupt between two refills
   // would hold the line low long enough for the LEDs to take it as the end of the frame, so this core
-  // takes no interrupts meanwhile (512 LEDs: 15 ms). WiFi and Bluetooth live on the other core.
+  // takes no interrupts meanwhile (512 LEDs: 15.4 ms). WiFi and Bluetooth live on the other core.
   portENTER_CRITICAL(&wireLock);
-  spiWriteNL(spi, wire, n * 9);
+  spiWriteNL(spi, wire, n * 12);
   portEXIT_CRITICAL(&wireLock);
 }
 
