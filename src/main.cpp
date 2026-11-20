@@ -50,7 +50,7 @@ static void handleButtons() {
       else ui::startTicker();
     } else {
       String a = net::address();
-      if (net::apActive()) a = String(settings.name) + " " + a;
+      if (net::apActive()) a = String(settings.name) + "  סיסמה " + settings.apPassword() + "  " + a;
       ui::notice(a.c_str(), CRGB(0, 200, 120), 6000);
     }
     break;

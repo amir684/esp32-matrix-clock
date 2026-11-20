@@ -29,7 +29,7 @@ S = {"width": 64, "tileW": 32, "corner": 0, "columns": True, "serpentine": True,
      "nightTicker": False, "nightOff": False, "effect": 0, "effectSeconds": 20, "partyBrightness": 160,
      "partySpeed": 5, "partyClock": 1, "partyMinutes": 0, "partyText": "PARTY!", "btnActiveLow": False,
      "wifiMode": 0, "wifiSsid": "", "hostname": "matrixclock", "tz": "IST-2IDT,M3.4.4/26,M10.5.0",
-     "ntpServer": "pool.ntp.org", "bleOn": True, "hasWifiPass": False, "hasApPass": False}
+     "ntpServer": "pool.ntp.org", "bleOn": True, "hasWifiPass": False, "hasApPass": False, "stickerPass": "D2ZDN93GBX"}
 ST = {"epoch": 1795005296, "timeValid": True, "time": "14:34:56", "hebDate": "ח' כסלו תשפ\"ז", "weekday": "רביעי",
       "gregDate": "18.11.2026", "temp": 23.5, "ticker": ["יום רביעי", "ח' כסלו תשפ\"ז", "פרשת ויצא"], "rtc": True,
       "ntp": False, "mode": "clock", "effectNow": 0, "power": True, "night": False, "bright": 60, "wifi": False,

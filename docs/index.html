@@ -770,7 +770,13 @@ tab("net", "שעה ורשת", () => {
   const dt = h("input", { type: "datetime-local", step: 1 });
   const ssid = h("input", { type: "text", maxlength: 32, placeholder: "שם הרשת" });
   const pass = h("input", { type: "password", maxlength: 64, placeholder: "סיסמה" });
-  const apPass = h("input", { type: "password", maxlength: 64, placeholder: "ריק = רשת פתוחה" });
+  const apPass = h("input", { type: "password", maxlength: 64, placeholder: "סיסמה חדשה" });
+  const sticker = h("b", { class: "ltr", style: "font-size:18px;letter-spacing:2px;user-select:all" });
+  const apNow = h("span", { class: "hint" });
+  deps.push(() => {
+    sticker.textContent = S.stickerPass || "—";
+    apNow.textContent = S.hasApPass ? "עכשיו בשימוש: סיסמה שבחרתם. שמירה של שדה ריק מחזירה לסיסמה שעל המדבקה." : "עכשיו בשימוש: הסיסמה שעל המדבקה.";
+  });
   const list = h("div", { class: "wifi-list" });
   const tzSel = h("select", { onchange: () => { if (tzSel.value !== "custom") save({ tz: tzSel.value }); else tzTxt.focus(); } },
     TZS.map(([n, v]) => h("option", { value: v }, n)), h("option", { value: "custom" }, "אחר (POSIX)"));
@@ -812,7 +818,8 @@ tab("net", "שעה ורשת", () => {
         text("ntpServer", "שרת שעה", null, 47),
         text("hostname", "שם השעון ברשת", "אפשר לגלוש אל http://שם.local", 24),
       ), () => S.wifiMode === 1),
-      row("סיסמה לרשת של השעון", "לרשת ה-WiFi של השעון. לפחות 8 תווים.", apPass, h("button", { class: "btn", onclick: () => {
+      row("סיסמת המדבקה", "הסיסמה הקבועה של השעון הזה, לרשת ה-WiFi שלו. אותיות גדולות באנגלית וספרות. נשארת גם אחרי איפוס.", sticker),
+      row("סיסמה אחרת לרשת של השעון", apNow, apPass, h("button", { class: "btn", onclick: () => {
         if (apPass.value && apPass.value.length < 8) return toast("לפחות 8 תווים", true);
         save({ apPass: apPass.value }); apPass.value = "";
       } }, "שמור")),

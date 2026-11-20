@@ -135,6 +135,7 @@ void Settings::toJson(JsonDocument &doc, bool withSecrets) const {
   } else {
     doc["hasWifiPass"] = wifiPass[0] != 0;
     doc["hasApPass"] = apPass[0] != 0;
+    doc["stickerPass"] = stickerPass(); // shown in the app, for the sticker
   }
 }
 
@@ -225,6 +226,26 @@ void Settings::fromJson(const JsonDocument &d) {
   if (!tz[0]) strlcpy(tz, IL_TZ, sizeof tz);
   getStr(d, "ntpServer", ntpServer, sizeof ntpServer);
   getBool(d, "bleOn", bleOn);
+}
+
+const char *stickerPass() {
+  static char pass[11] = "";
+  if (pass[0]) return pass;
+  Preferences p;
+  if (p.begin("device", false)) {
+    p.getString("appass", pass, sizeof pass);
+    if (strlen(pass) != 10) {
+      // 10 capitals and digits without look-alikes (O/0, I/1): the display draws only capitals, so what it
+      // shows is exactly what to type
+      static const char ABC[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      for (int i = 0; i < 10; i++) pass[i] = ABC[esp_random() % (sizeof ABC - 1)];
+      pass[10] = 0;
+      p.putString("appass", pass);
+    }
+    p.end();
+  }
+  if (!pass[0]) strlcpy(pass, "matrixclock", sizeof pass); // flash not readable: still never an open network
+  return pass;
 }
 
 bool Settings::load() {

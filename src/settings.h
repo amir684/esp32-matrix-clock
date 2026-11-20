@@ -38,6 +38,10 @@ enum Item : uint8_t {
 
 enum WifiMode : uint8_t { WIFI_STANDALONE, WIFI_HOME };
 
+// Every clock's own WiFi password, for the sticker on its back. Made at random on the first start and
+// kept in its own flash area, so a factory reset does not change it.
+const char *stickerPass();
+
 struct Settings {
   // ---- Matrix ----
   uint8_t width = 32;      // 32 or 64
@@ -109,7 +113,7 @@ struct Settings {
   uint8_t wifiMode = WIFI_STANDALONE;
   char wifiSsid[33] = "";
   char wifiPass[65] = "";
-  char apPass[65] = "";       // empty = open network
+  char apPass[65] = "";       // empty = this clock's own password (the sticker, see stickerPass())
   char hostname[25] = DEFAULT_HOSTNAME;
   char name[30] = AP_NAME;    // the clock's name: Bluetooth, its own WiFi network, the page title (29 bytes fit a BLE scan response)
   char tz[48] = IL_TZ;
@@ -122,6 +126,8 @@ struct Settings {
   void fromJson(const JsonDocument &doc); // fields missing from doc keep their values
   bool load();
   void save() const;
+  // Password of the clock's own WiFi network: the one chosen in the app, or else stickerPass()
+  const char *apPassword() const { return apPass[0] ? apPass : stickerPass(); }
 };
 
 extern Settings settings;
