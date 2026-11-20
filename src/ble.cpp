@@ -16,6 +16,11 @@ static uint8_t inId = 0;
 static bool inReady = false;
 static volatile bool isConnected = false;
 static volatile uint16_t mtu = 23;
+static volatile bool quietMode = false;
+
+static void advertise() {
+  if (!quietMode && server && server->getConnectedCount() < CONFIG_BT_NIMBLE_MAX_CONNECTIONS) NimBLEDevice::startAdvertising();
+}
 
 bool connected() { return isConnected; }
 
@@ -26,11 +31,11 @@ class ServerCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *s, NimBLEConnInfo &) override {
     isConnected = true;
     mtu = 23;
-    if (s->getConnectedCount() < CONFIG_BT_NIMBLE_MAX_CONNECTIONS) NimBLEDevice::startAdvertising();
+    advertise();
   }
   void onDisconnect(NimBLEServer *s, NimBLEConnInfo &, int) override {
     isConnected = s->getConnectedCount() > 0;
-    NimBLEDevice::startAdvertising();
+    advertise();
   }
   void onMTUChange(uint16_t m, NimBLEConnInfo &) override { mtu = m; }
 };
@@ -82,7 +87,6 @@ void begin() {
   NimBLECharacteristic *req = svc->createCharacteristic(BLE_REQ_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
   req->setCallbacks(new RequestCallbacks());
   rspChar = svc->createCharacteristic(BLE_RSP_UUID, NIMBLE_PROPERTY::NOTIFY);
-  server->advertiseOnDisconnect(true);
   server->start();
 
   // The 128-bit service id fills most of the 31-byte advertisement, so the name goes in the scan response
@@ -93,6 +97,10 @@ void begin() {
   sr.setName(settings.name);
   adv->setAdvertisementData(ad);
   adv->setScanResponseData(sr);
+  // WiFi and Bluetooth share one radio: every advertisement delays WiFi traffic. 300-500 ms instead of
+  // the default 20-150 ms still finds the clock within a second.
+  adv->setMinInterval(480); // x 0.625 ms
+  adv->setMaxInterval(800);
   adv->start();
   Serial.printf("bluetooth advertising as %s\n", settings.name);
 }
@@ -105,7 +113,14 @@ void setName(const char *name) {
   sr.setName(name);
   adv->stop();
   adv->setScanResponseData(sr);
-  if (server->getConnectedCount() < CONFIG_BT_NIMBLE_MAX_CONNECTIONS) adv->start();
+  advertise();
+}
+
+void quiet(bool on) {
+  if (on == quietMode || !server) return;
+  quietMode = on;
+  if (on) NimBLEDevice::stopAdvertising();
+  else advertise();
 }
 
 void loop() {

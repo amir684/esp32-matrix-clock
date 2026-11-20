@@ -89,6 +89,21 @@ canvas { width: 100%; display: block; image-rendering: pixelated; }
 .ble-box { max-width: 360px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .ble-box h2 { margin: 0; }
 .ble-box .btn { width: 100%; padding: 14px; font-size: 17px; }
+.game-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.game-card { background: var(--card2); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; color: var(--text); }
+.game-card:active { border-color: var(--acc); }
+.g-icon { font-size: 34px; line-height: 1.2; }
+.g-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.g-head h2 { margin: 0; }
+.g-score { font-size: 30px; }
+.g-over { color: var(--acc); min-height: 1.4em; margin: 4px 0; }
+.pad { direction: ltr; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 8px 0 12px; user-select: none; -webkit-user-select: none; }
+.dpad { display: grid; grid-template-columns: repeat(3, 60px); grid-template-rows: repeat(3, 60px); gap: 6px; }
+.key { background: var(--card2); border: 1px solid var(--line); border-radius: 16px; font-size: 24px; color: var(--text); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.key.on { background: var(--acc); border-color: transparent; }
+.key.a { width: 100px; height: 100px; border-radius: 50%; font-size: 30px; font-weight: 700; background: linear-gradient(135deg, var(--acc), var(--acc2)); color: #fff; border: 0; }
+.key.a.on { filter: brightness(1.35); transform: scale(.95); }
+.key.off { visibility: hidden; }
 .big-logo { width: 72px; height: 72px; border-radius: 20px; }
 .spin { width: 34px; height: 34px; border: 3px solid var(--line); border-top-color: var(--acc); border-radius: 50%; animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -237,11 +252,14 @@ const Ble = (() => {
       }
     } catch (e) { finish(false); }
   }
-  function request(method, path, body) {
+  function request(method, path, body, urgent) {
     if (method === "GET") { const q = queue.find(x => x.method === "GET" && x.path === path); if (q) return q.promise; }
-    const q = { method, path, body };
+    const q = { method, path, body, urgent };
     q.promise = new Promise((res, rej) => { q.resolve = res; q.reject = rej; });
-    queue.push(q); pump();
+    // game keys jump the queue (a status or picture request takes a few hundred ms), but stay in order
+    const at = urgent ? queue.findIndex(x => !x.urgent) : -1;
+    if (at >= 0) queue.splice(at, 0, q); else queue.push(q);
+    pump();
     return q.promise;
   }
   // One attempt at a time (the retry loop and the button may both ask); the handler is assigned, not added,
@@ -300,9 +318,9 @@ const Ble = (() => {
   return { request, connect, auto, isUp: () => up, onState: f => onState = f };
 })();
 
-async function api(path, body) {
+async function api(path, body, urgent) {
   if (BLE) {
-    const r = await Ble.request(body === undefined ? "GET" : "POST", path, body === undefined ? "" : JSON.stringify(body));
+    const r = await Ble.request(body === undefined ? "GET" : "POST", path, body === undefined ? "" : JSON.stringify(body), urgent);
     if (r.code >= 400) throw new Error(r.body);
     return JSON.parse(r.body);
   }
@@ -595,6 +613,72 @@ tab("party", "מסיבה", () => {
   ];
 });
 
+// ---------------- games ----------------
+// The game runs on the clock; this is only the controller. A key sends "pressed", then "still held"
+// every 0.6 s, then "released". Every answer carries the score.
+let gameRefresh = async () => {};
+tab("games", "משחקים", () => {
+  const INFO = [
+    { icon: "🐍", keys: ["up", "down", "left", "right"], help: "החצים מכוונים את הנחש. כל אוכל אדום מאריך אותו. הקצוות מחוברים: יוצאים מצד אחד ונכנסים מהשני.", touch: "לחצן 1 פונה שמאלה, לחצן 3 פונה ימינה." },
+    { icon: "🦖", keys: ["up", "down", "a"], help: "A או ▲ קופץ מעל הקקטוסים. ▼ (להחזיק) מתכופף מתחת לציפורים.", touch: "לחצן 1 או 2 קופץ, לחצן 3 מתכופף." },
+    { icon: "🐤", keys: ["a"], help: "כל לחיצה על A מעיפה את הציפור למעלה. עוברים בין הצינורות.", touch: "כל לחצן מעיף." },
+    { icon: "🧱", keys: ["up", "down", "left", "a"], help: "החלקים נופלים מימין לשמאל. ▲▼ מזיזים, A מסובב, ◀ מפיל עד הסוף.", touch: "לחצן 1 מזיז למעלה, 3 למטה, 2 מסובב, נגיעה ארוכה ב-2 מפילה." },
+  ];
+  let listKey = "";
+  const list = h("div", { class: "game-list" });
+  const title = h("h2", {}), scoreEl = h("b", { class: "g-score" }), bestEl = h("span", { class: "hint" });
+  const overEl = h("p", { class: "g-over" }), helpEl = h("p", { class: "hint" }), touchEl = h("p", { class: "hint" });
+  const keys = {};
+  async function send(k, s, r) {
+    try { show(await api("/api/action", { do: "key", k, s, r: r || 0 }, true)); } catch (e) {}
+  }
+  function key(k, label, cls) {
+    const b = h("button", { class: "key " + (cls || "") }, label);
+    let t = null;
+    b.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      if (t) return;
+      b.classList.add("on"); send(k, 1);
+      t = setInterval(() => send(k, 1, 1), 600);
+    });
+    const up = () => { if (!t) return; clearInterval(t); t = null; b.classList.remove("on"); send(k, 0); };
+    for (const ev of ["pointerup", "pointercancel", "pointerleave"]) b.addEventListener(ev, up);
+    b.addEventListener("contextmenu", e => e.preventDefault());
+    return keys[k] = b;
+  }
+  const pad = h("div", { class: "pad" },
+    h("div", { class: "dpad" }, h("span"), key("up", "▲"), h("span"), key("left", "◀"), h("span"), key("right", "▶"), h("span"), key("down", "▼"), h("span")),
+    key("a", "A", "a"));
+  const play = card("", null,
+    h("div", { class: "g-head" }, title, scoreEl, bestEl), overEl, pad, helpEl, touchEl,
+    h("div", { class: "btns" }, h("button", { class: "btn", onclick: () => api("/api/action", { do: "gameStop" }).then(gameRefresh).catch(() => {}) }, "יציאה לשעון")));
+  const pick = card("משחקים", "בחרו משחק. הוא רץ על השעון, והטלפון הוא השלט. אפשר לשחק גם בלחצני המגע; נגיעה ארוכה בלחצן 1 יוצאת. אחרי דקה וחצי בלי לחיצות השעון חוזר לבד.", list);
+  function show(st) {
+    if (!st || !st.games) return;
+    const lk = JSON.stringify(st.games);
+    if (lk !== listKey) {
+      listKey = lk;
+      list.replaceChildren(...st.games.map((g, i) => h("button", {
+        class: "game-card", onclick: () => api("/api/action", { do: "game", game: i }).then(gameRefresh).catch(() => toast("נכשל", true)),
+      }, h("span", { class: "g-icon" }, (INFO[i] || {}).icon || "🎮"), h("b", {}, g.name), h("span", { class: "hint" }, "שיא: " + g.best))));
+    }
+    const i = st.game, inf = INFO[i] || {};
+    play.style.display = i >= 0 ? "" : "none";
+    if (i < 0) return;
+    const g = st.games[i] || {};
+    title.textContent = (inf.icon || "") + " " + (g.name || "");
+    scoreEl.textContent = st.gameScore;
+    bestEl.textContent = "שיא: " + (g.best || 0);
+    overEl.textContent = st.gameOver ? (st.gameScore > 0 && st.gameScore >= g.best ? "שיא חדש! " : "המשחק נגמר. ") + "לחיצה על מקש מתחילה מחדש." : "";
+    helpEl.textContent = inf.help || "";
+    touchEl.textContent = "בלחצני המגע: " + (inf.touch || "");
+    for (const k in keys) keys[k].classList.toggle("off", !(inf.keys || []).includes(k));
+  }
+  gameRefresh = async () => show(await api("/api/game"));
+  play.style.display = "none";
+  return [play, pick];
+});
+
 tab("matrix", "מטריצה", () => {
   const cornerSvg = (c, cols) => {
     // a tiny 8x4 sketch of how the strip runs from the chosen corner
@@ -789,6 +873,8 @@ function stat(v, label) { return h("div", { class: "stat" }, h("b", {}, v ?? "�
 
 async function poll() {
   if (BLE && !Ble.isUp()) return;
+  // while playing only the small game state is fetched, so the keys keep the line to themselves
+  if ($("tab-games").classList.contains("on")) return gameRefresh().catch(() => {});
   try { ST = await api("/api/status"); } catch (e) { $("pillNet").textContent = "אין חיבור"; $("pillNet").className = "pill"; return; }
   $("pillTime").textContent = ST.time || "--:--";
   $("pillNet").textContent = BLE ? "Bluetooth" : ST.wifi ? ST.ssid : ST.ap ? "רשת עצמאית" : "לא מחובר";
@@ -830,6 +916,7 @@ function build() {
     for (const s of main.children) s.classList.toggle("on", s.id === "tab-" + id);
     for (const b of nav.children) b.classList.toggle("on", b.dataset.id === id);
     try { localStorage.setItem("tab", id); } catch (e) {}
+    if (id === "games" && (!BLE || Ble.isUp())) gameRefresh().catch(() => {});
     window.scrollTo(0, 0);
   }
   let first = "home";

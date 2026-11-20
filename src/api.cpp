@@ -6,6 +6,7 @@
 
 #include "ble.h"
 #include "effects.h"
+#include "games.h"
 #include "info.h"
 #include "matrix.h"
 #include "net.h"
@@ -39,6 +40,24 @@ static Response error(int code, const char *msg) { return {code, String("{\"erro
 
 // ---------------- Handlers ----------------
 
+// The game on screen (-1 = none), its score, and every game's best
+static void gameJson(JsonDocument &doc) {
+  doc["game"] = ui::mode() == ui::GAME ? game::current() : -1;
+  doc["gameScore"] = game::score();
+  doc["gameOver"] = game::over();
+  JsonArray g = doc["games"].to<JsonArray>();
+  for (int i = 0; i < game::count(); i++) {
+    JsonObject o = g.add<JsonObject>();
+    o["name"] = game::name(i);
+    o["best"] = game::best(i);
+  }
+}
+static Response gameState() {
+  JsonDocument doc;
+  gameJson(doc);
+  return json(doc);
+}
+
 static Response status() {
   JsonDocument doc;
   time_t now = time(nullptr);
@@ -54,7 +73,7 @@ static Response status() {
   }
   doc["rtc"] = rtc::present();
   doc["ntp"] = net::ntpSynced();
-  doc["mode"] = ui::mode() == ui::PARTY ? "party" : "clock";
+  doc["mode"] = ui::mode() == ui::PARTY ? "party" : ui::mode() == ui::GAME ? "game" : "clock";
   doc["effectNow"] = ui::effectIndex();
   doc["power"] = ui::power();
   doc["night"] = ui::night();
@@ -64,6 +83,7 @@ static Response status() {
   doc["ip"] = net::address();
   doc["ssid"] = connected ? WiFi.SSID() : String("");
   doc["rssi"] = connected ? WiFi.RSSI() : 0;
+  doc["wifiSleep"] = WiFi.getSleep();
   doc["ap"] = net::apActive() ? settings.name : "";
   doc["ble"] = ble::connected();
   doc["version"] = FIRMWARE_VERSION;
@@ -71,6 +91,7 @@ static Response status() {
   doc["uptime"] = millis() / 1000;
   JsonArray fxs = doc["effects"].to<JsonArray>();
   for (int i = 0; i < fx::count(); i++) fxs.add(fx::name(i));
+  gameJson(doc);
   return json(doc);
 }
 
@@ -126,7 +147,17 @@ static Response action(const String &body) {
   else if (a == "testMap") ui::startTest(ui::TEST_MAP);
   else if (a == "testColors") ui::startTest(ui::TEST_COLORS);
   else if (a == "testStop") ui::startTest(ui::TEST_NONE);
-  else if (a == "notice") ui::notice(doc["text"] | "", CRGB::Black, 6000);
+  else if (a == "game") ui::startGame(doc["game"] | 0);
+  else if (a == "gameStop") {
+    if (ui::mode() == ui::GAME) ui::setMode(ui::CLOCK);
+  } else if (a == "key") {
+    // a game key from the app; the answer carries the score so the app needs no extra request
+    static const char *const KEYS[game::KEY_N] = {"left", "right", "up", "down", "a"};
+    String k = doc["k"] | "";
+    for (int i = 0; i < game::KEY_N; i++)
+      if (k == KEYS[i]) game::key((game::Key)i, (doc["s"] | 1) != 0, (doc["r"] | 0) != 0);
+    return gameState();
+  } else if (a == "notice") ui::notice(doc["text"] | "", CRGB::Black, 6000);
   else if (a == "reboot") restart = true;
   else if (a == "factory") {
     settings.defaults();
@@ -189,6 +220,7 @@ Response handle(const String &method, const String &path, const String &body) {
     if (p == "/api/status") return status();
     if (p == "/api/settings" || p == "/api/backup") return getSettings();
     if (p == "/api/frame") return frame();
+    if (p == "/api/game") return gameState();
     if (p == "/api/scan") return scan();
   } else {
     if (p == "/api/settings") return postSettings(body);

@@ -5,7 +5,7 @@
 
 namespace ui {
 
-enum Mode : uint8_t { CLOCK, PARTY };
+enum Mode : uint8_t { CLOCK, PARTY, GAME };
 enum Test : uint8_t { TEST_NONE, TEST_CHAIN, TEST_MAP, TEST_COLORS };
 
 void begin();
@@ -16,6 +16,7 @@ void notice(const char *text, CRGB color, uint32_t ms = 3000);
 void startTicker();
 
 void setMode(Mode m);
+void startGame(int i); // see games.h; back to the clock when it is left alone
 Mode mode();
 void nextEffect();
 int effectIndex(); // the effect on screen now

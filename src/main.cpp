@@ -4,6 +4,7 @@
 
 #include "ble.h"
 #include "buttons.h"
+#include "games.h"
 #include "info.h"
 #include "matrix.h"
 #include "net.h"
@@ -25,6 +26,11 @@ static void handleButtons() {
   ui::wake();
   if (!ui::power() && !(which == 0 && e == btn::LONG)) { // any touch switches the display back on
     ui::setPower(true);
+    return;
+  }
+  if (ui::mode() == ui::GAME) { // the buttons play; a long touch on button 1 leaves the game
+    if (which == 0 && e == btn::LONG) ui::setMode(ui::CLOCK);
+    else game::button(which, e == btn::LONG);
     return;
   }
   bool party = ui::mode() == ui::PARTY;
@@ -75,6 +81,8 @@ void loop() {
     bleName = settings.name;
     ble::setName(settings.name);
   }
+  // a game played over WiFi: no Bluetooth advertising meanwhile, the keys arrive about 100 ms sooner
+  if (settings.bleOn) ble::quiet(ui::mode() == ui::GAME && !ble::connected());
   handleButtons();
 
   // Settings changed by a button are saved once the touching stops, to spare the flash

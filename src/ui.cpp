@@ -1,6 +1,7 @@
 #include "ui.h"
 
 #include "effects.h"
+#include "games.h"
 #include "info.h"
 #include "matrix.h"
 #include "settings.h"
@@ -402,7 +403,17 @@ void startTest(Test t) {
 
 // ---------------- Controls ----------------
 
+void startGame(int i) {
+  game::start(i);
+  if (game::current() < 0) return;
+  powerOn = true;
+  curMode = GAME;
+  test = TEST_NONE;
+  nActive = false;
+}
+
 void setMode(Mode m) {
+  if (m != GAME) game::stop();
   if (m == PARTY) {
     partySince = fxSince = millis();
     if (curMode != PARTY) {
@@ -518,12 +529,22 @@ void frame(time_t now, bool valid) {
   bool nightOff = curMode == CLOCK && isNight && settings.nightOff && millis() > wakeUntil;
   if (!powerOn || nightOff) target = 0;
   else if (curMode == PARTY) target = settings.partyBrightness;
+  else if (curMode == GAME) target = max<uint8_t>(settings.brightness, 30); // also at night: someone is playing
   else if (isNight) target = settings.nightBrightness;
   else target = settings.brightness;
   if (curBright < target) curBright += max(1, (target - curBright) / 6);
   else if (curBright > target) curBright -= max(1, (curBright - target) / 6);
 
   if (runTest()) return;
+
+  if (curMode == GAME) {
+    if (game::frame()) {
+      mx::show(curBright);
+      return;
+    }
+    curMode = CLOCK; // left alone: back to the clock
+    phase = P_CLOCK;
+  }
 
   if (curMode == PARTY) {
     drawParty();

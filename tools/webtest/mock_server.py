@@ -11,6 +11,10 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 PAGE = os.path.join(ROOT, "web", "index.html")
 FRAMES = os.path.join(ROOT, "tools", "sim", "out", "frames.txt")
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+# a second argument starts that game right away (0 snake .. 3 tetris), to look at the controller
+GAME = {"game": int(sys.argv[2]) if len(sys.argv) > 2 else -1, "gameScore": 0, "gameOver": False,
+        "games": [{"name": "סנייק", "best": 34}, {"name": "דינוזאור", "best": 12}, {"name": "פלאפי", "best": 0},
+                  {"name": "טטריס", "best": 7}]}
 
 S = {"width": 64, "tileW": 32, "corner": 0, "columns": True, "serpentine": True, "chainRtl": False, "altRotated": False,
      "mirrorX": False, "flipY": False, "colorOrder": 0, "maxMilliamps": 2000, "face": 3, "hour24": True,
@@ -69,6 +73,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send(S)
         elif path == "/api/status":
             self.send(ST)
+        elif path == "/api/game":
+            self.send(GAME)
         elif path == "/api/frame":
             self.send(frame())
         elif path == "/api/scan":
@@ -89,6 +95,16 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/action" and body.get("do") in ("party", "clock"):
             ST["mode"] = body["do"]
             self.send({"ok": True})
+        elif self.path == "/api/action" and body.get("do") == "game":
+            GAME.update(game=body.get("game", 0), gameScore=0, gameOver=False)
+            self.send({"ok": True})
+        elif self.path == "/api/action" and body.get("do") == "gameStop":
+            GAME["game"] = -1
+            self.send({"ok": True})
+        elif self.path == "/api/action" and body.get("do") == "key":
+            if body.get("s") and not body.get("r"):
+                GAME["gameScore"] += 1
+            self.send(GAME)
         else:
             self.send({"ok": True})
 

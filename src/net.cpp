@@ -89,6 +89,9 @@ static void connect() {
     return;
   }
   WiFi.mode(ap ? WIFI_AP_STA : WIFI_STA);
+  // No modem sleep: with it every request waits up to a beacon interval (50-150 ms here), too slow for
+  // the games. The clock runs on mains power anyway.
+  WiFi.setSleep(false);
   WiFi.begin(settings.wifiSsid, settings.wifiPass);
   offlineSince = millis() | 1;
   Serial.printf("connecting to %s\n", settings.wifiSsid);

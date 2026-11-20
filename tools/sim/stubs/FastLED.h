@@ -41,11 +41,18 @@ struct CRGB {
     b = b ? (b * s >> 8) + (s ? 1 : 0) : 0;
     return *this;
   }
+  CRGB &nscale8(uint8_t s) {
+    r = r * s >> 8;
+    g = g * s >> 8;
+    b = b * s >> 8;
+    return *this;
+  }
   explicit operator bool() const { return r || g || b; }
   bool operator==(const CRGB &o) const { return r == o.r && g == o.g && b == o.b; }
   enum : uint32_t { Black = 0, White = 0xFFFFFF, Red = 0xFF0000, Green = 0x008000, Blue = 0x0000FF, Yellow = 0xFFFF00 };
 };
 
+inline uint8_t sin8(uint8_t t) { return (uint8_t)(128 + 127 * __builtin_sin(t * 6.2831853 / 256)); }
 inline CRGB blend(const CRGB &a, const CRGB &b, uint8_t t) {
   return CRGB(a.r + ((b.r - a.r) * t) / 255, a.g + ((b.g - a.g) * t) / 255, a.b + ((b.b - a.b) * t) / 255);
 }

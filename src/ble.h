@@ -19,5 +19,7 @@ void begin();
 void loop(); // answers a waiting request; call from the main loop
 bool connected();
 void setName(const char *name); // new name in scans, without dropping a connection
+// Stops advertising (a game played over WiFi: the shared radio answers WiFi much faster), and back
+void quiet(bool on);
 
 } // namespace ble
