@@ -9,6 +9,7 @@
 #include <sys/time.h>
 
 #include "api.h"
+#include "bme.h"
 #include "info.h"
 #include "rtc.h"
 #include "settings.h"
@@ -164,6 +165,7 @@ static void handleNotFound() {
 void begin() {
   if (rtc::begin()) readRtc();
   else Serial.println("DS3231 not found");
+  if (!bme::begin()) Serial.println("no BME280");
   sntp_set_time_sync_notification_cb(onNtpSync);
   applyClock();
 

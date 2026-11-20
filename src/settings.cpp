@@ -4,12 +4,13 @@
 Settings settings;
 
 static const char *ITEM_KEYS[IT_COUNT] = {"weekday", "hebdate", "gregdate", "events", "parasha",
-                                          "shabbat", "omer",    "temp",     "sun",    "message"};
+                                          "shabbat", "omer",    "temp",     "sun",    "message",
+                                          "humidity", "pressure"};
 
 void Settings::defaults() {
   *this = Settings();
   items = (1u << IT_WEEKDAY) | (1u << IT_HEBDATE) | (1u << IT_GREGDATE) | (1u << IT_EVENTS) |
-          (1u << IT_PARASHA) | (1u << IT_SHABBAT) | (1u << IT_OMER) | (1u << IT_TEMP) | (1u << IT_MESSAGE);
+          (1u << IT_PARASHA) | (1u << IT_SHABBAT) | (1u << IT_OMER) | (1u << IT_TEMP) | (1u << IT_MESSAGE) | (1u << IT_HUMIDITY);
 }
 
 template <typename T> static T clampTo(T v, T lo, T hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -93,6 +94,7 @@ void Settings::toJson(JsonDocument &doc, bool withSecrets) const {
   doc["message"] = message;
   doc["messageColor"] = colorStr(messageColor);
   doc["tempOffset"] = tempOffset;
+  doc["bmeOffset"] = bmeOffset;
 
   doc["city"] = city;
   doc["lat"] = lat;
@@ -183,6 +185,7 @@ void Settings::fromJson(const JsonDocument &d) {
   getStr(d, "message", message, sizeof message);
   getColor(d, "messageColor", messageColor);
   getNum<float>(d, "tempOffset", tempOffset, -15, 15);
+  getNum<float>(d, "bmeOffset", bmeOffset, -15, 15);
 
   getStr(d, "city", city, sizeof city);
   getNum<float>(d, "lat", lat, -66, 66);

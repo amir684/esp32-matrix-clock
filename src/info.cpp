@@ -1,5 +1,6 @@
 #include "info.h"
 
+#include "bme.h"
 #include "hebcal.h"
 #include "rtc.h"
 #include "settings.h"
@@ -21,9 +22,9 @@ static int gy, gm, gd;
 static bool evening = false;  // after sunset, the Hebrew date has turned
 static long hebFixed = 0;     // the day the Hebrew date refers to
 static time_t nowT = 0;
-static float tempC = NAN;
+static float tempC = NAN, humid = NAN, pressure = NAN;
 
-static char sWeekday[16], sHebShort[32], sGregShort[8], sTemp[12];
+static char sWeekday[16], sHebShort[32], sGregShort[8], sTemp[12], sHum[8];
 
 void invalidate() { dayFixed = 0; }
 
@@ -72,8 +73,17 @@ void update(time_t now) {
   static uint32_t lastTemp = 0;
   if (!lastTemp || millis() - lastTemp > 10000) {
     lastTemp = millis() | 1;
-    float t = rtc::temperature();
-    tempC = isnan(t) ? NAN : t + settings.tempOffset;
+    // A BME280 measures the room; the DS3231's sensor sits on its chip and is the fallback
+    float t, h, p;
+    if (bme::read(t, h, p)) {
+      tempC = t + settings.bmeOffset;
+      humid = h;
+      pressure = p;
+    } else {
+      t = rtc::temperature();
+      tempC = isnan(t) ? NAN : t + settings.tempOffset;
+      humid = pressure = NAN;
+    }
   }
 
   int dow = heb::dayOfWeek(fixed);
@@ -83,12 +93,15 @@ void update(time_t now) {
   snprintf(sGregShort, sizeof sGregShort, "%d/%d", gd, gm);
   if (isnan(tempC)) sTemp[0] = 0;
   else snprintf(sTemp, sizeof sTemp, "%d°", (int)lroundf(tempC));
+  if (isnan(humid)) sHum[0] = 0;
+  else snprintf(sHum, sizeof sHum, "%d%%", (int)lroundf(humid));
 }
 
 const char *weekdayShort() { return sWeekday; }
 const char *hebDateShort() { return sHebShort; }
 const char *gregShort() { return sGregShort; }
 const char *tempShort() { return sTemp; }
+const char *humidityShort() { return sHum; }
 float temperature() { return tempC; }
 
 bool sunNight(time_t now) {
@@ -110,6 +123,8 @@ static CRGB itemColor(uint8_t item) {
       0xFF4830, // temperature
       0xFFE040, // sun
       0xFF40A0, // message (replaced by its own color)
+      0x40B0FF, // humidity
+      0x80E0C0, // air pressure
   };
   if (settings.tickerColors == TCOL_SINGLE) return CRGB(settings.tickerColor);
   if (item == IT_MESSAGE) return CRGB(settings.messageColor);
@@ -197,6 +212,10 @@ int buildTicker(Segment *out, int max) {
   }
   if (settings.has(IT_TEMP) && sTemp[0] && (s = seg(out, n, max, IT_TEMP)))
     snprintf(s->text, sizeof s->text, "טמפרטורה %s", sTemp);
+  if (settings.has(IT_HUMIDITY) && sHum[0] && (s = seg(out, n, max, IT_HUMIDITY)))
+    snprintf(s->text, sizeof s->text, "לחות %s", sHum);
+  if (settings.has(IT_PRESSURE) && !isnan(pressure) && (s = seg(out, n, max, IT_PRESSURE)))
+    snprintf(s->text, sizeof s->text, "לחץ אוויר %d מיליבר", (int)lroundf(pressure));
   if (settings.has(IT_SUN) && sunrise) {
     char a[8], b[8];
     fmtTime(sunrise, a, sizeof a);
@@ -217,6 +236,8 @@ void statusJson(JsonDocument &doc) {
   snprintf(buf, sizeof buf, "%02d.%02d.%04d", gd, gm, gy);
   doc["gregDate"] = buf;
   if (!isnan(tempC)) doc["temp"] = roundf(tempC * 10) / 10;
+  if (!isnan(humid)) doc["humidity"] = roundf(humid);
+  if (!isnan(pressure)) doc["pressure"] = roundf(pressure * 10) / 10;
   fmtTime(sunrise, buf, sizeof buf);
   doc["sunrise"] = buf;
   fmtTime(sunset, buf, sizeof buf);

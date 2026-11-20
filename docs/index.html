@@ -402,6 +402,8 @@ async function act(what, extra) {
 // Every control registers how to refresh itself from S
 function refresh() { for (const d of deps) d(); showName(); }
 function showIf(el, cond) { deps.push(() => el.style.display = cond() ? "" : "none"); return el; }
+// the same for what depends on the status too (which sensors the clock found)
+function showWhen(el, cond) { const f = () => el.style.display = cond() ? "" : "none"; deps.push(f); stDeps.push(f); return el; }
 
 function card(title, hint, ...rows) { return h("div", { class: "card" }, h("h2", {}, title), hint ? h("p", { class: "hint" }, hint) : null, ...rows); }
 function row(label, hint, ...ctl) {
@@ -560,8 +562,11 @@ tab("info", "תאריך ומידע", () => {
       itemToggle("parasha", "פרשת השבוע"),
       itemToggle("shabbat", "כניסת שבת וצאת שבת", "ביום שישי, בערבי חג ובשבת עצמה"),
       itemToggle("omer", "ספירת העומר"),
-      itemToggle("temp", "טמפרטורה", "מהחיישן שבתוך ה-DS3231"),
-      showIf(number("tempOffset", "תיקון טמפרטורה", "החיישן מודד את חום השבב, בדרך כלל מעט יותר מהחדר", -15, 15, 0.5, "°"), () => S.items && S.items.temp),
+      itemToggle("temp", "טמפרטורה", "מה-BME280 אם מחובר, אחרת מהחיישן שבתוך ה-DS3231"),
+      showWhen(number("tempOffset", "תיקון טמפרטורה", "החיישן של ה-DS3231 מודד את חום השבב, בדרך כלל מעט יותר מהחדר", -15, 15, 0.5, "°"), () => S.items && S.items.temp && !ST.sensor),
+      showWhen(number("bmeOffset", "תיקון טמפרטורה (BME280)", "אם החיישן קרוב ללדים או לבקר הוא מתחמם מעט. השוו למדחום והזינו את ההפרש", -15, 15, 0.5, "°"), () => S.items && S.items.temp && !!ST.sensor),
+      showWhen(itemToggle("humidity", "לחות", "מה-BME280"), () => ST.sensor === "BME280"),
+      showWhen(itemToggle("pressure", "לחץ אוויר", "במיליבר, מה-BME280"), () => !!ST.sensor),
       itemToggle("sun", "זריחה ושקיעה"),
       itemToggle("message", "הודעה קבועה"),
       showIf(text("message", "טקסט ההודעה", null, 99, "ברוכים הבאים"), () => S.items && S.items.message),
@@ -914,13 +919,15 @@ async function poll() {
     stat(ST.hebDate, "תאריך עברי"),
     stat(ST.gregDate, "תאריך לועזי"),
     stat(ST.temp != null ? ST.temp + "°" : null, "טמפרטורה"),
+    ST.humidity != null ? stat(ST.humidity + "%", "לחות") : "",
+    ST.pressure != null ? stat(Math.round(ST.pressure), "לחץ אוויר (מיליבר)") : "",
     stat(ST.mode === "party" ? "מסיבה 🎉" : ST.night ? "לילה 🌙" : "שעון", "מצב"));
   const pb = $("powerBtn"); if (pb) pb.textContent = ST.power ? "⏻ כיבוי" : "⏻ הדלקה";
   const party = $("partyBtn"); if (party) party.textContent = ST.mode === "party" ? "🕒 חזרה לשעון" : "🎉 מסיבה";
   const cn = $("clockNow"); if (cn) cn.textContent = ST.time ? ST.time + "  " + (ST.gregDate || "") : "לא מכוון";
   const ts = $("timeSrc"); if (ts) ts.textContent = (ST.ntp ? "מכוון מהאינטרנט" : ST.rtc ? "מה-DS3231" : "ה-DS3231 לא נמצא!") + (ST.ticker && ST.ticker.length ? " · " + ST.ticker.join(" · ") : "");
   const si = $("sysinfo"); if (si) si.replaceChildren(
-    stat(ST.version, "גרסה"), stat(ST.ip, "כתובת"), stat(ST.rtc ? "תקין" : "לא נמצא", "DS3231"),
+    stat(ST.version, "גרסה"), stat(ST.ip, "כתובת"), stat(ST.rtc ? "תקין" : "לא נמצא", "DS3231"), stat(ST.sensor || "לא מחובר", "חיישן BME280"),
     stat(Math.round(ST.heap / 1024) + "K", "זיכרון פנוי"), stat(Math.floor(ST.uptime / 3600) + ":" + String(Math.floor(ST.uptime / 60) % 60).padStart(2, "0"), "זמן פעולה"),
     stat(ST.wifi ? ST.rssi + " dBm" : "–", "עוצמת אות"));
   for (const d of stDeps) d();

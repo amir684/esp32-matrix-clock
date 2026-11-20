@@ -35,6 +35,12 @@ bool read(time_t &) { return false; }
 bool write(time_t) { return true; }
 float temperature() { return 25.0f; }
 } // namespace rtc
+namespace bme {
+bool read(float &t, float &h, float &p) {
+  t = 23.4f, h = 47, p = 1012.6f;
+  return true;
+}
+} // namespace bme
 namespace fx {
 int count() { return 17; }
 const char *name(int) { return "x"; }

@@ -33,6 +33,8 @@ enum Item : uint8_t {
   IT_TEMP,
   IT_SUN,      // sunrise and sunset
   IT_MESSAGE,
+  IT_HUMIDITY, // BME280
+  IT_PRESSURE, // BME280 / BMP280
   IT_COUNT
 };
 
@@ -78,6 +80,7 @@ struct Settings {
   char message[100] = "";
   uint32_t messageColor = 0xFF40A0;
   float tempOffset = -1.5;    // the DS3231 runs a little warmer than the room
+  float bmeOffset = 0;        // the same for a BME280, which is used instead of the DS3231 when fitted
 
   // ---- Place (Jewish calendar) ----
   char city[32] = "ירושלים";

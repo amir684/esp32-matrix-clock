@@ -100,12 +100,13 @@ static CRGB dim(CRGB c, uint8_t amount) {
 
 // Side box of the 8x64 "clock + info" face: one short item at a time, sliding up
 static void drawInfoBox(int x0, int x1, int y) {
-  const char *items[4];
-  uint32_t colors[4];
+  const char *items[5];
+  uint32_t colors[5];
   int n = 0;
   items[n] = info::weekdayShort(), colors[n++] = 0xFFD8A0;
   items[n] = info::hebDateShort(), colors[n++] = 0xFFB000;
   if (info::tempShort()[0]) items[n] = info::tempShort(), colors[n++] = 0xFF4830;
+  if (info::humidityShort()[0]) items[n] = info::humidityShort(), colors[n++] = 0x40B0FF;
   items[n] = info::gregShort(), colors[n++] = 0x00C8FF;
 
   const uint32_t PERIOD = 4000, SLIDE = 300;

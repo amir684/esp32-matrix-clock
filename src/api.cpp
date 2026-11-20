@@ -5,6 +5,7 @@
 #include <sys/time.h>
 
 #include "ble.h"
+#include "bme.h"
 #include "effects.h"
 #include "games.h"
 #include "info.h"
@@ -74,6 +75,7 @@ static Response status() {
     info::statusJson(doc);
   }
   doc["rtc"] = rtc::present();
+  doc["sensor"] = bme::model(); // "" = temperature from the DS3231
   doc["ntp"] = net::ntpSynced();
   doc["mode"] = ui::mode() == ui::PARTY ? "party" : ui::mode() == ui::GAME ? "game" : "clock";
   doc["effectNow"] = ui::effectIndex();

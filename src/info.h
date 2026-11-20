@@ -22,7 +22,8 @@ int buildTicker(Segment *out, int max);
 const char *weekdayShort();  // "רביעי" / "שבת"
 const char *hebDateShort();  // "כ"ז חשון"
 const char *gregShort();     // "18/11"
-const char *tempShort();     // "24°", "" without a DS3231
+const char *tempShort();     // "24°", "" without a DS3231 or BME280
+const char *humidityShort(); // "45%", "" without a BME280
 
 float temperature();         // with the offset, NAN without a DS3231
 bool sunNight(time_t now);   // between sunset and sunrise
