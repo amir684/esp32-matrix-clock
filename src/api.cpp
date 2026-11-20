@@ -168,6 +168,7 @@ static Response action(const String &body) {
   else if (a == "factory") {
     settings.defaults();
     settings.save();
+    game::resetAll();
     restart = true;
   } else return error(400, "unknown action");
   if (ui::takeDirty()) settings.save();

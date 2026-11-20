@@ -144,6 +144,7 @@ static void handleUpdateUpload() {
   } else if (up.status == UPLOAD_FILE_ABORTED) {
     Update.abort();
     updateOk = false;
+    ui::notice("העדכון נכשל", CRGB::Red, 4000); // the upload broke off: do not leave "מעדכן..." up for two minutes
   }
 }
 

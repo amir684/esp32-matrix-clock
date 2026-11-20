@@ -15,7 +15,8 @@ $src = "$root\src"
   "-DGAMES_NO_NVS" "$sim\sim.cpp" "$src\ui.cpp" "$src\games.cpp" "$src\matrix.cpp" "$src\info.cpp" "$src\hebcal.cpp" "$src\zmanim.cpp" -o "$sim\out\sim.exe"
 if ($LASTEXITCODE) { throw "compile failed" }
 
-& "$sim\out\sim.exe" > "$sim\out\frames.txt"
+# cmd does the redirect: Windows PowerShell's ">" writes UTF-16, which render.py cannot read
+cmd /c "`"$sim\out\sim.exe`" > `"$sim\out\frames.txt`""
 $ok = $LASTEXITCODE -eq 0
 Get-Content "$sim\out\frames.txt" -TotalCount 1
 Select-String -Path "$sim\out\frames.txt" -Pattern "^GAMES" | % Line

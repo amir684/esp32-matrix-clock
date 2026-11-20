@@ -33,5 +33,7 @@ bool over();
 int level(int i);
 bool ramp(int i);
 void setSpeed(int i, int level, bool ramp);
+// Factory reset: forget every best score and speed
+void resetAll();
 
 } // namespace game

@@ -583,6 +583,23 @@ void start(int i) {
 
 void stop() { cur = -1; }
 
+void resetAll() {
+  stop();
+#ifndef GAMES_NO_NVS
+  Preferences p;
+  if (p.begin("games", false)) {
+    p.clear();
+    p.end();
+  }
+#endif
+  for (int i = 0; i < N_GAMES; i++) {
+    bests[i] = 0;
+    levels[i] = 3;
+    ramps[i] = true;
+  }
+  bestsLoaded = true;
+}
+
 static bool canRestart() { return isOver && millis() - overAt > 900; }
 
 void key(Key k, bool down, bool keepalive) {

@@ -16,9 +16,21 @@ template <typename T> static T clampTo(T v, T lo, T hi) { return v < lo ? lo : (
 
 // ---- small helpers so every field is listed once per direction ----
 
+// strlcpy may cut a Hebrew letter in half when the text is longer than the field: drop the broken tail
+static void trimUtf8(char *s) {
+  size_t n = strlen(s), k = n;
+  while (k > 0 && ((uint8_t)s[k - 1] & 0xC0) == 0x80) k--; // continuation bytes at the end
+  if (k > 0 && ((uint8_t)s[k - 1] & 0xC0) == 0xC0) {        // their lead byte
+    uint8_t lead = s[k - 1];
+    size_t want = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : 2;
+    if (n - (k - 1) < want) s[k - 1] = 0;
+  }
+}
 static void getStr(const JsonDocument &d, const char *k, char *dst, size_t size) {
   JsonVariantConst v = d[k];
-  if (v.is<const char *>()) strlcpy(dst, v.as<const char *>(), size);
+  if (!v.is<const char *>()) return;
+  strlcpy(dst, v.as<const char *>(), size);
+  trimUtf8(dst);
 }
 template <typename T> static void getNum(const JsonDocument &d, const char *k, T &dst, T lo, T hi) {
   JsonVariantConst v = d[k];
@@ -207,14 +219,6 @@ void Settings::fromJson(const JsonDocument &d) {
   getStr(d, "hostname", hostname, sizeof hostname);
   if (!hostname[0]) strlcpy(hostname, DEFAULT_HOSTNAME, sizeof hostname);
   getStr(d, "name", name, sizeof name);
-  // strlcpy may have cut a Hebrew letter in half: drop the broken tail
-  size_t n = strlen(name), k = n;
-  while (k > 0 && ((uint8_t)name[k - 1] & 0xC0) == 0x80) k--;            // continuation bytes at the end
-  if (k > 0 && ((uint8_t)name[k - 1] & 0xC0) == 0xC0) {                   // their lead byte
-    uint8_t lead = name[k - 1];
-    size_t want = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : 2;
-    if (n - (k - 1) < want) name[k - 1] = 0;
-  }
   while (name[0] == ' ') memmove(name, name + 1, strlen(name));
   if (!name[0]) strlcpy(name, AP_NAME, sizeof name);
   getStr(d, "tz", tz, sizeof tz);
