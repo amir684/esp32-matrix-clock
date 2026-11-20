@@ -51,7 +51,7 @@
 
 | רכיב | הערה |
 |---|---|
-| ESP32 DevKit V1 (ESP32-WROOM-32) | עם זיכרון פלאש של 16MB. ללוח של 4MB יש הוראות ב-`platformio.ini` |
+| ESP32 DevKit V1 (ESP32-WROOM-32) | עם זיכרון פלאש של 16MB, או 4MB עם הסביבה `esp32-4mb` |
 | מטריצת WS2812B, 8×32 | אחת או שתיים |
 | DS3231 | מודול עם סוללה |
 | 3 × TTP223 | מודולי מגע. בלי לגעת בגשרים: יציאה פעילה בגבוה, לא נעולה |
@@ -76,7 +76,8 @@
 </div>
 
 ```
-pio run -t upload
+pio run -t upload               # 16MB flash
+pio run -e esp32-4mb -t upload   # 4MB flash
 ```
 
 <div dir="rtl">
