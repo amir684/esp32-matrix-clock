@@ -173,7 +173,7 @@ int buildTicker(Segment *out, int max) {
       stripBars(s->text);
     }
   }
-  if (settings.has(IT_PARASHA)) {
+  if (settings.has(IT_PARASHA) && dow == 5) { // Friday only (until midnight): this Shabbat's portion
     long shabbat = hebFixed + (6 - heb::dayOfWeek(hebFixed));
     heb::Parasha p = heb::parasha(shabbat, settings.israel, settings.parashaScheme);
     if (p.first) {
